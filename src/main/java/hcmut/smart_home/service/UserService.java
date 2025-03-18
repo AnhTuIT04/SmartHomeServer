@@ -17,8 +17,10 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 
 import hcmut.smart_home.dto.user.AuthResponse;
+import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
+import hcmut.smart_home.dto.user.SingleResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
@@ -157,7 +159,7 @@ public class UserService {
         String refreshToken = token.getRefreshToken();
 
         // Validate refresh token
-        if (!jwt.validateToken(refreshToken)) {
+        if (!jwt.validateRefreshToken(refreshToken)) {
             throw new UnauthorizedException("Invalid or expired refresh token");
         }
 
@@ -257,6 +259,85 @@ public class UserService {
             throw new RuntimeException("Internal Server Error", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            throw new RuntimeException("Internal Server Error", e);
+        }
+    }
+
+    /**
+     * Retrieves user information based on the provided user ID.
+     *
+     * @param userId the ID of the user whose information is to be retrieved
+     * @return a UserResponse object containing the user's details
+     * @throws NotFoundException if the user is not found in the Firestore database
+     * @throws RuntimeException if an internal server error occurs during the process
+     */
+    public UserResponse getUserInfo(String userId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Extract user details
+            String firstName = snapshot.getString("firstName");
+            String lastName = snapshot.getString("lastName");
+            String email = snapshot.getString("email");
+            String phone = snapshot.getString("phone");
+            String avatar = snapshot.getString("avatar");
+
+            return new UserResponse(firstName, lastName, email, phone, avatar);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Internal Server Error", e);
+        } catch (ExecutionException e) {
+            throw new RuntimeException("Internal Server Error", e);
+        }
+    }
+
+    /**
+     * Changes the password for a user.
+     *
+     * @param request the request containing the current and new passwords
+     * @param userId the ID of the user whose password is to be changed
+     * @return a SingleResponse indicating the result of the password change operation
+     * @throws NotFoundException if the user is not found
+     * @throws UnauthorizedException if the current password is invalid
+     * @throws RuntimeException if an internal server error occurs
+     */
+    public SingleResponse changePassword(ChangePasswordRequest request, String userId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Extract the stored password
+            String storedPassword = snapshot.getString("password");
+
+            // Validate the old password
+            if (!Argon.compare(request.getCurrPassword(), storedPassword)) {
+                throw new UnauthorizedException("Current password is incorrect");
+            }
+
+            // Hash the new password
+            String hashedPassword = Argon.hashPassword(request.getNewPassword());
+
+            // Update the password in Firestore
+            docRef.update("password", hashedPassword).get();
+
+            return new SingleResponse("Password changed successfully");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Internal Server Error", e);
+        } catch (ExecutionException e) {
             throw new RuntimeException("Internal Server Error", e);
         }
     }

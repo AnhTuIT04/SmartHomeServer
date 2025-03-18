@@ -42,7 +42,7 @@ public class PublicEndpointInterceptor implements HandlerInterceptor {
         }
 
         String token = authorizationHeader.substring(7);
-        if (jwt.validateToken(token)) {
+        if (jwt.validateAccessToken(token)) {
             String userId = jwt.extractId(token);
             request.setAttribute("userId", userId);
             return true;

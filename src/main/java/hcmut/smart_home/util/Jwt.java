@@ -33,6 +33,7 @@ public class Jwt {
     public String generateAccessToken(String id) {
         return Jwts.builder()
                 .subject(id)
+                .claim("type", "access")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + ACCESS_TOKEN_EXPIRATION))
                 .signWith(getSigningKey())
@@ -42,19 +43,38 @@ public class Jwt {
     public String generateRefreshToken(String id) {
         return Jwts.builder()
                 .subject(id)
+                .claim("type", "refresh")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + REFRESH_TOKEN_EXPIRATION))
                 .signWith(getSigningKey())
                 .compact();
     }
 
-    public boolean validateToken(String token) {
+    public boolean validateAccessToken(String token) {
         try {
-            Jwts.parser()
-                .verifyWith((SecretKey) getSigningKey())
-                .build()
-                .parse(token);
-            return true;
+            String type = Jwts.parser()
+                                .verifyWith((SecretKey) getSigningKey())
+                                .build()
+                                .parseSignedClaims(token)
+                                .getPayload()
+                                .get("type", String.class);
+
+            return "access".equals(type);
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public boolean validateRefreshToken(String token) {
+        try {
+            String type = Jwts.parser()
+                                .verifyWith((SecretKey) getSigningKey())
+                                .build()
+                                .parseSignedClaims(token)
+                                .getPayload()
+                                .get("type", String.class);
+
+            return "refresh".equals(type);
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }

@@ -1,4 +1,4 @@
-package hcmut.smart_home.dto.user;
+package hcmut.smart_home.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 

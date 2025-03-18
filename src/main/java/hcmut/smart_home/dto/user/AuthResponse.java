@@ -6,13 +6,13 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public class AuthResponse extends UserResponse {
     private final TokenResponse token;
 
-    public AuthResponse(CreateUserRequest user, String accessToken, String refreshToken) {
-        super(user.getFirstName(), user.getLastName(), user.getEmail(), user.getPhone(), user.getAvatar());
+    public AuthResponse(CreateUserRequest user, String id, String accessToken, String refreshToken) {
+        super(id, user.getFirstName(), user.getLastName(), user.getEmail(), user.getPhone(), user.getAvatar(), user.getSensorId());
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 
-    public AuthResponse(LoginUserRequest user, String firstName, String lastName, String phone, String avatar, String accessToken, String refreshToken) {
-        super(firstName, lastName, user.getEmail(), phone, avatar);
+    public AuthResponse(LoginUserRequest user, String id, String firstName, String lastName, String phone, String avatar, String sensorId, String accessToken, String refreshToken) {
+        super(id, firstName, lastName, user.getEmail(), phone, avatar, sensorId);
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 

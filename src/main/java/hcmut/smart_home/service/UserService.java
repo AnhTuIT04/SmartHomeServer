@@ -16,16 +16,17 @@ import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 
+import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
-import hcmut.smart_home.dto.user.SingleResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
 import hcmut.smart_home.dto.user.UserResponse;
-import hcmut.smart_home.exception.AccountAlreadyExistsException;
+import hcmut.smart_home.exception.ConflictException;
+import hcmut.smart_home.exception.InternalServerErrorException;
 import hcmut.smart_home.exception.NotFoundException;
 import hcmut.smart_home.exception.UnauthorizedException;
 import hcmut.smart_home.util.Argon;
@@ -50,20 +51,20 @@ public class UserService {
      *
      * @param user The request object containing user details.
      * @return UserResponse containing user details and authentication tokens.
-     * @throws AccountAlreadyExistsException if the email or phone number already exists.
-     * @throws RuntimeException if there is an issue interacting with Firestore.
+     * @throws ConflictException if the email or phone number already exists.
+     * @throws InternalServerErrorException if there is an issue interacting with Firestore.
      */
     public AuthResponse createUser(final CreateUserRequest user) {
         try {
             CollectionReference usersCollection = firestore.collection("users");
 
             // Validate if email or phone already exists
-            if (isEmailTaken(user.getEmail(), null)) {
-                throw new AccountAlreadyExistsException("Email already exists");
+            if (isEmailTaken(usersCollection, user.getEmail(), null)) {
+                throw new ConflictException("Email already exists");
             }
 
-            if (isPhoneTaken(user.getPhone(), null)) {
-                throw new AccountAlreadyExistsException("Phone number already exists");
+            if (isPhoneTaken(usersCollection, user.getPhone(), null)) {
+                throw new ConflictException("Phone number already exists");
             }
 
             // Create new document reference for the user
@@ -82,13 +83,13 @@ public class UserService {
             String refreshToken = jwt.generateRefreshToken(userId);
 
             // Return the created user response
-            return new AuthResponse(user, accessToken, refreshToken);
+            return new AuthResponse(user, docRef.getId(), accessToken, refreshToken);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         }
     }
 
@@ -98,7 +99,7 @@ public class UserService {
      * @param user The login request containing email and password.
      * @return UserResponse containing user details and authentication tokens.
      * @throws UnauthorizedException if the email or password is incorrect.
-     * @throws RuntimeException if there is an issue fetching user data from Firestore.
+     * @throws InternalServerErrorException if there is an issue fetching user data from Firestore.
      */
     public AuthResponse login(LoginUserRequest user) {
         try {
@@ -130,19 +131,20 @@ public class UserService {
             String lastName = userDoc.getString("lastName");
             String phone = userDoc.getString("phone");
             String avatar = userDoc.getString("avatar");
+            String sensorId = userDoc.getString("sensorId");
 
             // Generate authentication tokens
             String accessToken = jwt.generateAccessToken(userId);
             String refreshToken = jwt.generateRefreshToken(userId);
 
             // Return the user response
-            return new AuthResponse(user, firstName, lastName, phone, avatar, accessToken, refreshToken);
+            return new AuthResponse(user, userId, firstName, lastName, phone, avatar, sensorId, accessToken, refreshToken);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         }
     }
 
@@ -181,13 +183,14 @@ public class UserService {
      * @param userId The ID of the user to be updated.
      * @return UserResponse object containing the updated user information.
      * @throws NotFoundException if the user with the given userId does not exist.
-     * @throws AccountAlreadyExistsException if the new email or phone number is already taken by another user.
-     * @throws RuntimeException if there is an internal server error during the update process.
+     * @throws ConflictException if the new email or phone number is already taken by another user.
+     * @throws InternalServerErrorException if there is an internal server error during the update process.
      */
     public UserResponse updateUser(UpdateUserRequest user, String userId) {
         try {
             // Get reference to the user document in Firestore
-            DocumentReference docRef = firestore.collection("users").document(userId);
+            CollectionReference usersCollection = firestore.collection("users");
+            DocumentReference docRef = usersCollection.document(userId);
 
             // Check if the user exists
             var snapshot = docRef.get().get();
@@ -202,6 +205,7 @@ public class UserService {
             userResponse.setEmail(snapshot.getString("email"));
             userResponse.setPhone(snapshot.getString("phone"));
             userResponse.setAvatar(snapshot.getString("avatar"));
+            userResponse.setSensorId(snapshot.getString("sensorId"));
 
             // Create a batch write
             WriteBatch batch = firestore.batch();
@@ -223,8 +227,8 @@ public class UserService {
 
             // Check if email is unique before updating
             if (user.getEmail() != null && !user.getEmail().equals(userResponse.getEmail())) {
-                if (isEmailTaken(user.getEmail(), userId)) {
-                    throw new AccountAlreadyExistsException("Email is already taken");
+                if (isEmailTaken(usersCollection, user.getEmail(), userId)) {
+                    throw new ConflictException("Email is already taken");
                 }
                 batch.update(docRef, "email", user.getEmail());
                 userResponse.setEmail(user.getEmail());
@@ -233,8 +237,8 @@ public class UserService {
 
             // Check if phone is unique before updating
             if (user.getPhone() != null && !user.getPhone().equals(userResponse.getPhone())) {
-                if (isPhoneTaken(user.getPhone(), userId)) {
-                    throw new AccountAlreadyExistsException("Phone is already taken");
+                if (isPhoneTaken(usersCollection, user.getPhone(), userId)) {
+                    throw new ConflictException("Phone is already taken");
                 }
                 batch.update(docRef, "phone", user.getPhone());
                 userResponse.setPhone(user.getPhone());
@@ -256,10 +260,10 @@ public class UserService {
 
             return userResponse;
         } catch (IOException | ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         }
     }
 
@@ -269,7 +273,7 @@ public class UserService {
      * @param userId the ID of the user whose information is to be retrieved
      * @return a UserResponse object containing the user's details
      * @throws NotFoundException if the user is not found in the Firestore database
-     * @throws RuntimeException if an internal server error occurs during the process
+     * @throws InternalServerErrorException if an internal server error occurs during the process
      */
     public UserResponse getUserInfo(String userId) {
         try {
@@ -288,13 +292,14 @@ public class UserService {
             String email = snapshot.getString("email");
             String phone = snapshot.getString("phone");
             String avatar = snapshot.getString("avatar");
+            String sensorId = snapshot.getString("sensorId");
 
-            return new UserResponse(firstName, lastName, email, phone, avatar);
+            return new UserResponse(docRef.getId(), firstName, lastName, email, phone, avatar, sensorId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         }
     }
 
@@ -306,7 +311,7 @@ public class UserService {
      * @return a SingleResponse indicating the result of the password change operation
      * @throws NotFoundException if the user is not found
      * @throws UnauthorizedException if the current password is invalid
-     * @throws RuntimeException if an internal server error occurs
+     * @throws InternalServerErrorException if an internal server error occurs
      */
     public SingleResponse changePassword(ChangePasswordRequest request, String userId) {
         try {
@@ -336,80 +341,67 @@ public class UserService {
             return new SingleResponse("Password changed successfully");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+            throw new InternalServerErrorException();
         }
     }
 
+    
     /**
-     * Checks if the given email is already taken by another user.
+     * Checks if the given email is already taken by another user in the Firestore collection.
      *
-     * @param email  the email to check for existence
-     * @param userId the ID of the user to exclude from the check
+     * @param collection the Firestore collection reference to query
+     * @param email the email to check for existence
+     * @param userId the user ID to exclude from the check (can be null)
      * @return true if the email is taken by another user, false otherwise
-     * @throws RuntimeException if an error occurs while querying the Firestore database
+     * @throws InterruptedException if the thread is interrupted while waiting for the query to complete
+     * @throws ExecutionException if an error occurs while executing the query
      */
-    private boolean isEmailTaken(String email, String userId) {
-        try {
-            CollectionReference usersCollection = firestore.collection("users");
+    private boolean isEmailTaken(CollectionReference collection, String email, String userId) throws InterruptedException, ExecutionException {
+        // Query Firestore for user with the given email
+        Query emailQuery = collection.whereEqualTo("email", email);
+        ApiFuture<QuerySnapshot> emailQuerySnapshot = emailQuery.get();
+        List<QueryDocumentSnapshot> documents = emailQuerySnapshot.get().getDocuments();
 
-            // Query Firestore for user with the given email
-            Query emailQuery = usersCollection.whereEqualTo("email", email);
-            ApiFuture<QuerySnapshot> emailQuerySnapshot = emailQuery.get();
-            List<QueryDocumentSnapshot> documents = emailQuerySnapshot.get().getDocuments();
-
-            // Validate user existence
-            if (documents.isEmpty()) {
-                return false;
-            }
-
-            // Retrieve the user document
-            DocumentSnapshot userDoc = documents.get(0);
-            String storedUserId = userDoc.getId();
-
-            return userId == null || !storedUserId.equals(userId);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+        // Validate user existence
+        if (documents.isEmpty()) {
+            return false;
         }
+
+        // Retrieve the user document
+        DocumentSnapshot userDoc = documents.get(0);
+        String storedUserId = userDoc.getId();
+
+        return userId == null || !storedUserId.equals(userId);
     }
 
     /**
-     * Checks if a phone number is already taken by another user.
+     * Checks if a phone number is already taken by another user in the Firestore collection.
      *
-     * @param phone  the phone number to check
-     * @param userId the ID of the user to exclude from the check
-     * @return true if the phone number is taken by another user, false otherwise
-     * @throws RuntimeException if there is an interruption or execution error during the Firestore query
+     * @param collection The Firestore collection reference to query.
+     * @param phone The phone number to check for existence.
+     * @param userId The user ID to exclude from the check (can be null).
+     * @return true if the phone number is taken by another user, false otherwise.
+     * @throws InterruptedException If the Firestore query is interrupted.
+     * @throws ExecutionException If the Firestore query fails.
      */
-    private boolean isPhoneTaken(String phone, String userId) {
-        try {
-            CollectionReference usersCollection = firestore.collection("users");
+    private boolean isPhoneTaken(CollectionReference collection, String phone, String userId) throws InterruptedException, ExecutionException {
+        // Query Firestore for user with the given phone
+        Query phoneQuery = collection.whereEqualTo("phone", phone);
+        ApiFuture<QuerySnapshot> phoneQuerySnapshot = phoneQuery.get();
+        List<QueryDocumentSnapshot> documents = phoneQuerySnapshot.get().getDocuments();
 
-            // Query Firestore for user with the given phone
-            Query phoneQuery = usersCollection.whereEqualTo("phone", phone);
-            ApiFuture<QuerySnapshot> phoneQuerySnapshot = phoneQuery.get();
-            List<QueryDocumentSnapshot> documents = phoneQuerySnapshot.get().getDocuments();
-
-            // Validate user existence
-            if (documents.isEmpty()) {
-                return false;
-            }
-
-            // Retrieve the user document
-            DocumentSnapshot userDoc = documents.get(0);
-            String storedUserId = userDoc.getId();
-
-            return userId == null || !storedUserId.equals(userId);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Internal Server Error", e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException("Internal Server Error", e);
+        // Validate user existence
+        if (documents.isEmpty()) {
+            return false;
         }
+
+        // Retrieve the user document
+        DocumentSnapshot userDoc = documents.get(0);
+        String storedUserId = userDoc.getId();
+
+        return userId == null || !storedUserId.equals(userId);
     }
 
 }

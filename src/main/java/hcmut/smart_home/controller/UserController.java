@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import hcmut.smart_home.config.PublicEndpoint;
+import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
-import hcmut.smart_home.dto.user.SingleResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
@@ -29,7 +29,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
-
 
 @RestController
 @RequestMapping("/api/v1/user")

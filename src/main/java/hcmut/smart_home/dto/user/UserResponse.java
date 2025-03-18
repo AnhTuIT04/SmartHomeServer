@@ -4,20 +4,24 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(title = "UserResponse", accessMode = Schema.AccessMode.READ_ONLY)
 public class UserResponse {
+    private String id;
     private String firstName;
     private String lastName;
     private String email;
     private String phone;
     private String avatar;
+    private String sensorId;
 
     public UserResponse() {}
 
-    public UserResponse(String firstName, String lastName, String email, String phone, String avatar) {
+    public UserResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId) {
+        this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
         this.email = email;
         this.phone = phone;
         this.avatar = avatar;
+        this.sensorId = sensorId;
     }
 
     public String getFirstName() {
@@ -58,5 +62,21 @@ public class UserResponse {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getSensorId() {
+        return sensorId;
+    }
+
+    public void setSensorId(String sensorId) {
+        this.sensorId = sensorId;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 }

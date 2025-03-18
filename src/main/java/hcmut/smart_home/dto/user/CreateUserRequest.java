@@ -3,6 +3,7 @@ package hcmut.smart_home.dto.user;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Null;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -26,7 +27,11 @@ public class CreateUserRequest {
     @NotBlank(message = "Phone is required")
     private String phone;
 
+    @Null(message = "Avatar is read-only")
     private String avatar = null;
+
+    @Null(message = "Sensor ID is read-only")
+    private String sensorId = null;
 
     public String getFirstName() {
         return firstName;
@@ -74,6 +79,14 @@ public class CreateUserRequest {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getSensorId() {
+        return sensorId;
+    }
+
+    public void setSensorId(String sensorId) {
+        this.sensorId = sensorId;
     }
     
 }

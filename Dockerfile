@@ -8,6 +8,9 @@ COPY mvnw mvnw.cmd ./
 COPY .mvn .mvn  
 COPY pom.xml ./  
 
+# Make wrapper executable
+RUN chmod +x mvnw 
+
 # Download dependencies first to leverage caching
 RUN ./mvnw dependency:go-offline -B  
 

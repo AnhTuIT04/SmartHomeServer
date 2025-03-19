@@ -17,13 +17,13 @@ import hcmut.smart_home.config.PublicEndpoint;
 @RequestMapping("/")
 public class Application {
 
-	@Value("${server.port}")
+	@Value("${server.port:8080}")
     private String serverPort;
 
-	@Value("${springdoc.swagger-ui.path}")
+	@Value("${springdoc.swagger-ui.path:/swagger-ui.html}")
 	private String swaggerPath;
 
-	@Value("${spring.application.name}")
+	@Value("${spring.application.name:SmartHome}")
 	private String appName;
 
 	public static void main(String[] args) {

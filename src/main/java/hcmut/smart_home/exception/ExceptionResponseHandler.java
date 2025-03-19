@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -28,7 +30,8 @@ import hcmut.smart_home.dto.exception.ExceptionResponse;
 public class ExceptionResponseHandler extends ResponseEntityExceptionHandler {
 	
 	private static final String NOT_READABLE_REQUEST_ERROR_MESSAGE = "The request is malformed. Ensure the JSON structure is correct.";
-	
+	private static final Logger log = LoggerFactory.getLogger(ExceptionResponseHandler.class);
+
 	@ResponseBody
 	@ExceptionHandler(ResponseStatusException.class)
 	public ResponseEntity<ExceptionResponse<String>> responseStatusExceptionHandler(final ResponseStatusException exception) {
@@ -96,7 +99,7 @@ public class ExceptionResponseHandler extends ResponseEntityExceptionHandler {
 	}
 	
 	private void logException(final Exception exception) {
-		System.out.println("Exception encountered: " + exception.getMessage());
+		log.error("Exception occurred: {}", exception.getMessage(), "ERROR, PLEASE FIX");
 	}
 
 }

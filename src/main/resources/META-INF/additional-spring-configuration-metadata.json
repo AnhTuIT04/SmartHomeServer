@@ -23,5 +23,10 @@
     "name": "cloudinary.url",
     "type": "java.lang.String",
     "description": "A description for 'cloudinary.url'"
+  },
+  {
+    "name": "firebase.credentials",
+    "type": "java.lang.String",
+    "description": "A description for 'firebase.credentials'"
   }
 ]}

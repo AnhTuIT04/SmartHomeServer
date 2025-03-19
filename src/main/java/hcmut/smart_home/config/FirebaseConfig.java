@@ -1,7 +1,8 @@
 package hcmut.smart_home.config;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.Base64;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -17,16 +18,15 @@ import com.google.firebase.cloud.FirestoreClient;
 public class FirebaseConfig {
 
     @Bean
-    public FirebaseApp initializeFirebase(@Value("${firebase.url}") String databaseUrl) throws IOException {
+    public FirebaseApp initializeFirebase(@Value("${firebase.credentials}") String encodedCredentials, @Value("${firebase.url}") String databaseUrl) throws IOException {
         if (!FirebaseApp.getApps().isEmpty()) {
             FirebaseApp.getInstance().delete(); 
         }
 
-        FileInputStream serviceAccount =
-                new FileInputStream("src/main/resources/firebase/firebase-service-account.json");
+        byte[] decodedCredentials = Base64.getDecoder().decode(encodedCredentials);
 
         FirebaseOptions options = FirebaseOptions.builder()
-                .setCredentials(GoogleCredentials.fromStream(serviceAccount))
+                .setCredentials(GoogleCredentials.fromStream(new ByteArrayInputStream(decodedCredentials)))
                 .setDatabaseUrl(databaseUrl) 
                 .build();
 

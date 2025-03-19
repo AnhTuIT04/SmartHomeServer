@@ -33,5 +33,5 @@ build/
 .vscode/
 
 ### Sensitive data ###
-src/main/resources/firebase/
-src/main/resources/application.properties
+firebase-service-account.json
+.env

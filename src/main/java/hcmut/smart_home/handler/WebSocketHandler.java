@@ -35,6 +35,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
     private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
 
     private final ConcurrentHashMap<WebSocketSession, Pair<String, String>> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WebSocketSession, ValueEventListener> sensorListeners = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WebSocketSession, ValueEventListener> controlListeners = new ConcurrentHashMap<>();
 
     public WebSocketHandler(Jwt jwt, Firestore firestore, FirebaseDatabase firebaseDatabase) {
         this.jwt = jwt;
@@ -66,7 +68,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
-            
+
             String sensorId = snapshot.getString("sensorId");
             if (sensorId == null) {
                 session.sendMessage(new TextMessage("Error: Sensor not found"));
@@ -78,16 +80,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
             DatabaseReference sensorRef = firebaseDatabase.getReference(sensorId);
             DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
-
             SensorData data = new SensorData();
 
-            // Listen for sensor data
-            sensorRef.addValueEventListener(new ValueEventListener() {
+            ValueEventListener sensorListener = new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot snapshot) {
                     if (snapshot.exists()) {
                         data.updateData(snapshot.getValue());
-
                         if (!data.isSendable()) {
                             data.setSendable();
                         } else {
@@ -100,15 +99,15 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 public void onCancelled(DatabaseError error) {
                     handleDatabaseError(session, error);
                 }
-            });
+            };
+            sensorRef.addValueEventListener(sensorListener);
+            sensorListeners.put(session, sensorListener);
 
-            // Listen for control data
-            controlRef.addValueEventListener(new ValueEventListener() {
+            ValueEventListener controlListener = new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot snapshot) {
                     if (snapshot.exists()) {
                         data.updateData(snapshot.getValue());
-                        
                         if (!data.isSendable()) {
                             data.setSendable();
                         } else {
@@ -121,7 +120,9 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 public void onCancelled(DatabaseError error) {
                     handleDatabaseError(session, error);
                 }
-            });
+            };
+            controlRef.addValueEventListener(controlListener);
+            controlListeners.put(session, controlListener);
 
         } catch (IOException | ExecutionException | InterruptedException e) {
             logger.error("Error while establishing connection: " + e.getMessage());
@@ -177,6 +178,12 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        DatabaseReference sensorRef = firebaseDatabase.getReference(sessions.get(session).getSecond());
+        sensorRef.removeEventListener(sensorListeners.remove(session));
+    
+        DatabaseReference controlRef = firebaseDatabase.getReference(sessions.get(session).getSecond() + "_control");
+        controlRef.removeEventListener(controlListeners.remove(session));
+
         sessions.remove(session);
     }
-}
+} 

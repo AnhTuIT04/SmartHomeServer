@@ -49,14 +49,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
         try {
             URI uri = session.getUri();
             if (uri == null || uri.getQuery() == null || !uri.getQuery().startsWith("token=")) {
-                session.sendMessage(new TextMessage("Error: Unauthorized"));
+                session.sendMessage(new TextMessage("{\"Error\": \"Unauthorized\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             String token = uri.getQuery().split("token=")[1];
             if (token == null || !jwt.validateAccessToken(token)) {
-                session.sendMessage(new TextMessage("Error: Unauthorized"));
+                session.sendMessage(new TextMessage("{\"Error\": \"Unauthorized\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
@@ -64,14 +64,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
             String userId = jwt.extractId(token);
             DocumentSnapshot snapshot = firestore.collection("users").document(userId).get().get();
             if (!snapshot.exists()) {
-                session.sendMessage(new TextMessage("Error: User not found"));
+                session.sendMessage(new TextMessage("{\"Error\": \"User not found\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             String sensorId = snapshot.getString("sensorId");
             if (sensorId == null) {
-                session.sendMessage(new TextMessage("Error: Sensor not found"));
+                session.sendMessage(new TextMessage("{\"Error\": \"Sensor not found\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
@@ -139,7 +139,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     private void handleDatabaseError(WebSocketSession session, DatabaseError error) {
         try {
-            session.sendMessage(new TextMessage("Error: " + error.getMessage()));
+            session.sendMessage(new TextMessage("{\"Error\": " + error.getMessage() + "}"));
             session.close(CloseStatus.SERVER_ERROR);
         } catch (IOException e) {
             logger.error("Error while closing session: " + e.getMessage());

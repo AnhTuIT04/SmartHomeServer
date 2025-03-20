@@ -30,7 +30,7 @@ import hcmut.smart_home.dto.exception.ExceptionResponse;
 public class ExceptionResponseHandler extends ResponseEntityExceptionHandler {
 	
 	private static final String NOT_READABLE_REQUEST_ERROR_MESSAGE = "The request is malformed. Ensure the JSON structure is correct.";
-	private static final Logger log = LoggerFactory.getLogger(ExceptionResponseHandler.class);
+	private static final Logger logger = LoggerFactory.getLogger(ExceptionResponseHandler.class);
 
 	@ResponseBody
 	@ExceptionHandler(ResponseStatusException.class)
@@ -99,7 +99,7 @@ public class ExceptionResponseHandler extends ResponseEntityExceptionHandler {
 	}
 	
 	private void logException(final Exception exception) {
-		log.error("Exception occurred: {}", exception.getMessage(), "ERROR, PLEASE FIX");
+		logger.error("Exception occurred: {}", exception.getMessage());
 	}
 
 }

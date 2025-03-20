@@ -13,6 +13,7 @@ import com.google.cloud.firestore.Firestore;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.cloud.FirestoreClient;
+import com.google.firebase.database.FirebaseDatabase;
 
 @Configuration
 public class FirebaseConfig {
@@ -39,4 +40,10 @@ public class FirebaseConfig {
 	public Firestore firestore(final FirebaseApp firebaseApp) {
 		return FirestoreClient.getFirestore(firebaseApp);
 	}
+
+    @Bean
+    public FirebaseDatabase firebaseDatabase(FirebaseApp firebaseApp) {
+        return FirebaseDatabase.getInstance(firebaseApp);
+    }
+    
 }

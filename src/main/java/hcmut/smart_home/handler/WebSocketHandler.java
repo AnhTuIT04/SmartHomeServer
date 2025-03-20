@@ -5,6 +5,8 @@ import java.net.URI;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 
+import org.cloudinary.json.JSONException;
+import org.cloudinary.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -21,7 +23,9 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
+import hcmut.smart_home.dto.sensor.SensorData;
 import hcmut.smart_home.util.Jwt;
+import hcmut.smart_home.util.Pair;
 
 @Component
 public class WebSocketHandler extends TextWebSocketHandler {
@@ -30,7 +34,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     private final FirebaseDatabase firebaseDatabase;
     private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
 
-    private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<WebSocketSession, Pair<String, String>> sessions = new ConcurrentHashMap<>();
 
     public WebSocketHandler(Jwt jwt, Firestore firestore, FirebaseDatabase firebaseDatabase) {
         this.jwt = jwt;
@@ -48,7 +52,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            String token = uri.getQuery().split("token=")[1]; // Get token from query parameter
+            String token = uri.getQuery().split("token=")[1];
             if (token == null || !jwt.validateAccessToken(token)) {
                 session.sendMessage(new TextMessage("Error: Unauthorized"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
@@ -56,17 +60,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
             }
 
             String userId = jwt.extractId(token);
-            sessions.put(userId, session);
-
-            // Get reference to the user document in Firestore
             DocumentSnapshot snapshot = firestore.collection("users").document(userId).get().get();
             if (!snapshot.exists()) {
                 session.sendMessage(new TextMessage("Error: User not found"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
-
-            // Get the sensorId of the user
+            
             String sensorId = snapshot.getString("sensorId");
             if (sensorId == null) {
                 session.sendMessage(new TextMessage("Error: Sensor not found"));
@@ -74,44 +74,110 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
+            sessions.put(session, new Pair<>(userId, sensorId));
+
             DatabaseReference sensorRef = firebaseDatabase.getReference(sensorId);
+            DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
+
+            SensorData data = new SensorData();
+
+            // Listen for sensor data
             sensorRef.addValueEventListener(new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot snapshot) {
                     if (snapshot.exists()) {
-                        try {
-                            Object value = snapshot.getValue();
-                            if (value != null) {
-                                session.sendMessage(new TextMessage(value.toString()));
-                            }
-                        } catch (IOException e) {
-                            logger.error("Error while establishing connection: " + e.getMessage());
+                        data.updateData(snapshot.getValue());
+
+                        if (!data.isSendable()) {
+                            data.setSendable();
+                        } else {
+                            sendDataToClient(session, data);
                         }
                     }
                 }
 
                 @Override
                 public void onCancelled(DatabaseError error) {
-                    try {
-                        session.sendMessage(new TextMessage("Error: " + error.getMessage()));
-                        session.close(CloseStatus.SERVER_ERROR);
-                        logger.error("Error while reading data from sensor: " + error.getMessage());
-                    } catch (IOException e) {
-                        logger.error("Error while establishing connection: " + e.getMessage());
-                    }
+                    handleDatabaseError(session, error);
                 }
             });
-            
-        } catch (IOException | ExecutionException e) {
+
+            // Listen for control data
+            controlRef.addValueEventListener(new ValueEventListener() {
+                @Override
+                public void onDataChange(DataSnapshot snapshot) {
+                    if (snapshot.exists()) {
+                        data.updateData(snapshot.getValue());
+                        
+                        if (!data.isSendable()) {
+                            data.setSendable();
+                        } else {
+                            sendDataToClient(session, data);
+                        }
+                    }
+                }
+
+                @Override
+                public void onCancelled(DatabaseError error) {
+                    handleDatabaseError(session, error);
+                }
+            });
+
+        } catch (IOException | ExecutionException | InterruptedException e) {
             logger.error("Error while establishing connection: " + e.getMessage());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.error("Error while establishing connection: " + e.getMessage());
-        } 
+        }
+    }
+
+    private void sendDataToClient(WebSocketSession session, SensorData data) {
+        try {
+            session.sendMessage(new TextMessage(data.toString()));
+        } catch (IOException e) {
+            logger.error("Error while sending data to client: " + e.getMessage());
+        }
+    }
+
+    private void handleDatabaseError(WebSocketSession session, DatabaseError error) {
+        try {
+            session.sendMessage(new TextMessage("Error: " + error.getMessage()));
+            session.close(CloseStatus.SERVER_ERROR);
+        } catch (IOException e) {
+            logger.error("Error while closing session: " + e.getMessage());
+        }
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        try {
+            String payload = message.getPayload();
+            System.out.println("Received message: " + payload);
+
+            // Parse JSON payload
+            JSONObject jsonMessage = new JSONObject(payload);
+            String action = jsonMessage.optString("action");
+            String device = jsonMessage.optString("device");
+            String state = jsonMessage.optString("state");
+
+            // Check if the message is a control message
+            if ("toggle".equals(action) && !device.isEmpty() && !state.isEmpty()) {
+                String sensorId = sessions.get(session).getSecond();
+                if (sensorId != null) {
+                    DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
+                    if ("fan".equals(device)) {
+                        controlRef.child("button_for_fan").setValueAsync("on".equals(state) ? 1 : 0);
+                    } else if ("light".equals(device)) {
+                        controlRef.child("button_for_led").setValueAsync("on".equals(state) ? 1 : 0);
+                    }
+                } else {
+                    session.sendMessage(new TextMessage("Error: Sensor not found for user."));
+                }
+            }
+        } catch (IOException | JSONException e) {
+            logger.error("Error while handling message: " + e.getMessage());
+        }
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        sessions.values().remove(session);
+        sessions.remove(session);
     }
 }

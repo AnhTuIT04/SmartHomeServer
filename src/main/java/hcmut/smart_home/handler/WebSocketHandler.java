@@ -149,7 +149,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             String payload = message.getPayload();
-            System.out.println("Received message: " + payload);
 
             // Parse JSON payload
             JSONObject jsonMessage = new JSONObject(payload);

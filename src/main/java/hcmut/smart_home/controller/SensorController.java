@@ -9,13 +9,16 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import hcmut.smart_home.dto.SingleResponse;
+import hcmut.smart_home.dto.sensor.FilterResponse;
 import hcmut.smart_home.dto.sensor.PendingRequestResponse;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.service.SensorService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -66,7 +69,7 @@ public class SensorController {
     @GetMapping("/user/subscribers")
     @ApiResponses(value = { 
         @ApiResponse(responseCode = "200", description = "Get subscribers successfully",
-            content = @Content(schema = @Schema(implementation = PendingRequestResponse.class))),
+            content = @Content(schema = @Schema(implementation = PendingRequestResponse[].class))),
         @ApiResponse(responseCode = "404", description = "Sensor/User not found",
             content = @Content()),
         @ApiResponse(responseCode = "403", description = "User is not the owner of the sensor",
@@ -82,7 +85,7 @@ public class SensorController {
     @GetMapping("/user/requests")
     @ApiResponses(value = { 
         @ApiResponse(responseCode = "200", description = "Requests retrieved successfully",
-            content = @Content(schema = @Schema(implementation = PendingRequestResponse.class))),
+            content = @Content(schema = @Schema(implementation = PendingRequestResponse[].class))),
         @ApiResponse(responseCode = "404", description = "Sensor/User not found",
             content = @Content()),
         @ApiResponse(responseCode = "403", description = "User is not the owner of the sensor",
@@ -125,5 +128,40 @@ public class SensorController {
     @Operation(summary = "Reject a request to subscribe to a sensor", tags = "Sensor")
     public ResponseEntity<SingleResponse> rejectRequest(@RequestAttribute("userId") String userId, @PathVariable String requestId) {
         return ResponseEntity.ok().body(sensorService.rejectRequest(userId, requestId));
+    }
+
+    @GetMapping("/chart/filters")
+    @ApiResponses(value = { 
+        @ApiResponse(responseCode = "200", description = "Filters retrieved successfully",
+            content = @Content(schema = @Schema(implementation = FilterResponse[].class))),
+        @ApiResponse(responseCode = "400", description = "Invalid field value",
+            content = @Content()),
+        @ApiResponse(responseCode = "403", description = "User does not have permission to get chart filters",
+            content = @Content()),
+        @ApiResponse(responseCode = "404", description = "Sensor/User not found",
+            content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content())
+    })
+    @Operation(summary = "Retrieve chart filters based on sensor data", tags = "Sensor")
+    public ResponseEntity<List<FilterResponse>> getChartFilters(
+        @RequestAttribute("userId")     String userId,
+
+        @Parameter(description = "Field to filter data on. Accepted values: temperature, humidity, light_intensity.")
+        @RequestParam(required = true)  String field,
+
+        @Parameter(description = "Minimum value of the specified field for filtering.")
+        @RequestParam(required = false) Double min,
+
+        @Parameter(description = "Maximum value of the specified field for filtering.")
+        @RequestParam(required = false) Double max,
+
+        @Parameter(description = "Start time for filtering data, in Unix timestamp (seconds). Default is three months ago.")
+        @RequestParam(required = false) Long startTime,
+
+        @Parameter(description = "End time for filtering data, in Unix timestamp (seconds). Default is the current time.")
+        @RequestParam(required = false) Long endTime
+    ) {
+        return ResponseEntity.ok().body(sensorService.getChartFilters(userId, field, min, max, startTime, endTime));
     }
 }

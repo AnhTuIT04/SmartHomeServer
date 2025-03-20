@@ -1,7 +1,10 @@
 package hcmut.smart_home.service;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
@@ -13,12 +16,14 @@ import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
 
 import hcmut.smart_home.Application;
 import hcmut.smart_home.dto.SingleResponse;
+import hcmut.smart_home.dto.sensor.FilterResponse;
 import hcmut.smart_home.dto.sensor.PendingRequestResponse;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.exception.BadRequestException;
@@ -470,6 +475,83 @@ public class SensorService {
             requestsCollection.document(requestId).delete();
 
             return new SingleResponse("Request rejected successfully");
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Retrieves a list of chart filters based on the specified parameters.
+     *
+     * @param userId    The ID of the user requesting the chart filters.
+     * @param field     The field to filter by. Must be one of "humidity", "light_intensity", or "temperature".
+     * @param min       The minimum value for the specified field (optional).
+     * @param max       The maximum value for the specified field (optional).
+     * @param startTime The start time for the filter in epoch seconds (optional, defaults to 3 months ago if null).
+     * @param endTime   The end time for the filter in epoch seconds (optional, defaults to the current time if null).
+     * @return A list of {@link FilterResponse} objects containing the filtered data.
+     * @throws BadRequestException        If the field is null or not one of the allowed values.
+     * @throws NotFoundException          If the user or sensor is not found.
+     * @throws ForbiddenException         If the user does not have permission to access the sensor.
+     * @throws InternalServerErrorException If an error occurs during query execution.
+     */
+    public List<FilterResponse> getChartFilters(String userId, String field, Double min, Double max, Long startTime, Long endTime) {
+        try {
+            if (field == null || !List.of("humidity", "light_intensity", "temperature").contains(field)) {
+                throw new BadRequestException("Field must be 'humidity', 'light_intensity' or 'temperature'");
+            }
+
+            CollectionReference usersCollection = firestore.collection("users");
+            CollectionReference sensorsCollection = firestore.collection("sensors");
+
+            // Check if user exists
+            DocumentSnapshot userSnapshot = usersCollection.document(userId).get().get();
+            if (!userSnapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            String sensorId = userSnapshot.getString("sensorId");
+            if (sensorId == null) {
+                throw new ForbiddenException("User does not have permission to get chart filters");
+            }
+
+            // Check if sensor exists
+            DocumentSnapshot sensorSnapshot = sensorsCollection.document(sensorId).get().get();
+            if (!sensorSnapshot.exists()) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            // Default start time is 3 months ago
+            if (startTime == null) {
+                startTime = Instant.now().minus(90, ChronoUnit.DAYS).getEpochSecond();
+            }
+            // Default end time is now
+            if (endTime == null) {
+                endTime = Instant.now().getEpochSecond();  
+            }
+
+            Query query = firestore.collection("user_sensor").whereEqualTo("sensorId", sensorId);
+
+            if (min != null) query = query.whereGreaterThanOrEqualTo(field, min);
+            if (max != null) query = query.whereLessThanOrEqualTo(field, max);
+
+            query = query.whereGreaterThanOrEqualTo("timestamp", startTime)
+                        .whereLessThanOrEqualTo("timestamp", endTime)
+                        .orderBy("timestamp"); 
+
+            ApiFuture<QuerySnapshot> future = query.get();
+
+            return future.get().getDocuments().stream()
+                .map(doc -> new FilterResponse(
+                    doc.getId(),
+                    Objects.requireNonNullElse(doc.getDouble(field), 0.0),
+                    Objects.requireNonNullElse(doc.getLong("timestamp"), 0L) 
+                ))
+                .collect(Collectors.toList());
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

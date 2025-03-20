@@ -178,11 +178,15 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        DatabaseReference sensorRef = firebaseDatabase.getReference(sessions.get(session).getSecond());
-        sensorRef.removeEventListener(sensorListeners.remove(session));
-    
-        DatabaseReference controlRef = firebaseDatabase.getReference(sessions.get(session).getSecond() + "_control");
-        controlRef.removeEventListener(controlListeners.remove(session));
+        if (sensorListeners.containsKey(session)) {
+            DatabaseReference sensorRef = firebaseDatabase.getReference(sessions.get(session).getSecond());
+            sensorRef.removeEventListener(sensorListeners.remove(session));
+        }
+        
+        if (controlListeners.containsKey(session)) {
+            DatabaseReference controlRef = firebaseDatabase.getReference(sessions.get(session).getSecond() + "_control");
+            controlRef.removeEventListener(controlListeners.remove(session));
+        }
 
         sessions.remove(session);
     }

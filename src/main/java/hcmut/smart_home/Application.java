@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import hcmut.smart_home.config.PublicEndpoint;
+import io.swagger.v3.oas.annotations.Operation;
 
 @SpringBootApplication
 @RestController
@@ -32,6 +33,7 @@ public class Application {
 
 	@PublicEndpoint
 	@GetMapping
+    @Operation(summary = "Get server information", tags = "Application")
     public Map<String, Object> getServerInfo() {
         Map<String, Object> serverInfo = new HashMap<>();
 

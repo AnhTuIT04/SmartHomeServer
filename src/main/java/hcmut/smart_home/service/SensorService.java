@@ -253,6 +253,70 @@ public class SensorService {
     }
 
     /**
+     * Removes a user's access to a sensor owned by another user.
+     *
+     * @param ownerId The ID of the owner of the sensor.
+     * @param userId The ID of the user whose access is to be removed.
+     * @return A SingleResponse object containing a success message if the operation is successful.
+     * @throws NotFoundException If the owner or user does not exist, or if the sensor does not exist.
+     * @throws BadRequestException If the owner or user is not subscribed to any sensor, or if the user is not subscribed to the owner's sensor.
+     * @throws ForbiddenException If the owner does not have permission to remove the user's access, or if the owner attempts to remove their own access.
+     * @throws InternalServerErrorException If an unexpected error occurs during the operation.
+     */
+    public SingleResponse removeUserAccess(String ownerId, String userId) {
+        try {
+            CollectionReference usersCollection = firestore.collection("users");
+            CollectionReference sensorsCollection = firestore.collection("sensors");
+
+            // Check if users exists
+            DocumentSnapshot ownerSnapshot = usersCollection.document(ownerId).get().get();
+            DocumentSnapshot userSnapshot = usersCollection.document(userId).get().get();
+            if (!ownerSnapshot.exists() || !userSnapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Get sensorId of users
+            String ownerSensorId = ownerSnapshot.getString("sensorId");
+            String userSensorId = userSnapshot.getString("sensorId");
+            if (ownerSensorId == null || userSensorId == null) {
+                throw new BadRequestException("User not subscribed to any sensor");
+            }
+
+            // Get sensor document
+            DocumentSnapshot sensorSnapshot = sensorsCollection.document(ownerSensorId).get().get();
+            if (!sensorSnapshot.exists()) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            // Check if user is the owner of the sensor
+            if (!ownerId.equals(sensorSnapshot.getString("ownerId"))) {
+                throw new ForbiddenException("User does not have permission to remove user access");
+            }
+
+            // Check if user is subscribed to the sensor
+            if (!userSensorId.equals(ownerSensorId)) {
+                throw new BadRequestException("User is not subscribed to your sensor");
+            }
+
+            // Check if user is the owner of the sensor
+            if (ownerId.equals(userId)) {
+                throw new ForbiddenException("Owner cannot remove their own access");
+            }
+
+            // Remove sensorId from user
+            usersCollection.document(userId).update("sensorId", null);
+
+            return new SingleResponse("User access removed successfully");
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
      * Retrieves a list of subscribers for a given user based on the sensor they own.
      *
      * @param userId The ID of the user requesting the subscriber list.

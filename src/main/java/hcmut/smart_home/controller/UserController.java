@@ -127,7 +127,6 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.OK).body(userService.getUserInfo(userId));
     }
     
-    
     @PutMapping("/change-password")
     @Operation(summary = "Change user password", tags = "User Management")
     @ApiResponses(value = {

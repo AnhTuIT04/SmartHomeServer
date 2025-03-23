@@ -3,6 +3,7 @@ package hcmut.smart_home.controller;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -64,6 +65,27 @@ public class SensorController {
     @Operation(summary = "Unsubscribe from a sensor, if subscriber is the owner, sensor will be unassigned and all subscribers will be removed", tags = "Sensor")
     public ResponseEntity<SingleResponse> unsubscribe( @RequestAttribute("userId") String userId) {
         return ResponseEntity.ok().body(sensorService.unsubscribe(userId));
+    }
+
+    @DeleteMapping("/user/{userId}")
+    @Operation(summary = "Remove a user's access from a sensor", tags = "Sensor")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "User access removed successfully",
+            content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+        @ApiResponse(responseCode = "400", description = "User is the owner of the sensor",
+            content = @Content()),
+        @ApiResponse(responseCode = "403", description = "User does not have permission to remove user access",
+            content = @Content()),
+        @ApiResponse(responseCode = "404", description = "Sensor/User not found",
+            content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+            content = @Content())
+    })
+    public ResponseEntity<SingleResponse> removeUserAccess(
+        @PathVariable String userId,
+        @RequestAttribute("userId") String ownerId
+    ) {
+        return ResponseEntity.ok().body(sensorService.removeUserAccess(ownerId, userId));
     }
     
     @GetMapping("/user/subscribers")

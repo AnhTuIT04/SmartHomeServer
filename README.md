@@ -1,4 +1,4 @@
-# Smart Home
+# Smart Home Server
 
 This is the server-side application for the Smart Home project.
 
@@ -8,7 +8,7 @@ This is the server-side application for the Smart Home project.
 - [Features](#features)
 - [Installation](#installation)
 - [Configuration](#configuration)
-- [Usage](#usage)
+- [Running the Application](#running-the-application)
 - [API Documentation](#api-documentation)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
@@ -16,100 +16,152 @@ This is the server-side application for the Smart Home project.
 
 ## Introduction
 
-The Smart Home project is designed to provide a comprehensive solution for managing and automating various aspects of a smart home. This server-side application is built using Spring Boot and integrates with Firebase, Cloudinary, and other services.
+The Smart Home project is designed to provide a comprehensive solution for managing and automating various aspects of a smart home. This server-side application is built using Spring Boot with integrations for Firebase, Cloudinary, and other services. The project requires **Java 23** to run.
 
 ## Features
 
-- User authentication and authorization
-- JWT-based security
+- User authentication and authorization with JWT
 - Integration with Firebase for real-time database
 - Cloudinary integration for image storage
-- RESTful API with Swagger documentation
-- Exception handling and validation
+- RESTful API documented with Swagger
+- Exception handling and input validation
 
 ## Installation
 
-To install and run the project locally, follow these steps:
+To install and run the project locally:
 
 1. Clone the repository:
-    ```sh
-    git clone https://github.com/your-username/smart-home.git
-    cd smart-home
-    ```
-
-2. Build the project using Maven:
-    ```sh
-    ./mvnw clean install
-    ```
-
-3. Run the application:
-    ```sh
-    ./mvnw spring-boot:run
-    ```
+   ```sh
+   git clone https://github.com/AnhTuIT04/SmartHomeServer.git
+   cd SmartHomeServer
+   ```
 
 ## Configuration
 
-The application requires configuration for Firebase, Cloudinary, and JWT properties. These configurations are specified in the `src/main/resources/application.properties` file.
+### Environment Variables
 
-```properties
-# Application properties
-spring.application.name=smart-home
-server.port=8080
+- `JWT_SECRET`: A secure string with a minimum length of 256 bits. It is recommended to generate this using a secure random generator.
+- `ACCESS_TOKEN_EXPIRATION` & `REFRESH_TOKEN_EXPIRATION`: The expiration times for access and refresh tokens, respectively, in milliseconds.
+- `CLOUDINARY_URL`: Obtainable from your Cloudinary dashboard under **Account Details**.
+- `FIREBASE_URL`: The database URL from your Firebase project settings under the **Realtime Database** section.
+- `FIREBASE_CREDENTIALS`: This is a Base64 encoded version of your Firebase service account JSON file.
 
-# JWT properties
-jwt.secret=your-jwt-secret
-jwt.access-token-expiration=900000
-jwt.refresh-token-expiration=604800000
+To download the `service-account.json`:
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project and navigate to **Project Settings**.
+3. In the **Service Accounts** tab, click **Generate New Private Key**.
+4. Save the downloaded `service-account.json` file.
 
-# Firebase properties
-firebase.url=https://your-firebase-url
 
-# Cloudinary properties
-cloudinary.url=cloudinary://your-cloudinary-url
-```
+### Environment Setup
 
-## Usage
-The application provides a RESTful API for managing users and other smart home functionalities. You can use tools like Postman to interact with the API.
+1. Create a `.env` file in the root directory with the following content:
+   ```properties
+   JWT_SECRET=your-jwt-secret
+   ACCESS_TOKEN_EXPIRATION=8640000
+   REFRESH_TOKEN_EXPIRATION=604800000
+
+   CLOUDINARY_URL=cloudinary://your-cloudinary-url
+
+   FIREBASE_URL=https://your-firebase-url
+   FIREBASE_CREDENTIALS=your-base64-encoded-service-account
+   ```
+
+2. To get `FIREBASE_CREDENTIALS`, encode your Firebase service account file (`service-account.json`) as Base64:
+   - **Linux / Git Bash**:
+      ```sh
+      cat service-account.json | base64 -w 0
+      ```
+   - **Windows PowerShell**:
+      ```powershell
+      [Convert]::ToBase64String([System.IO.File]::ReadAllBytes("service-account.json"))
+      ```
+   - **Python**:
+      ```sh
+      python -c "import base64; print(base64.b64encode(open('service-account.json', 'rb').read()).decode())"
+      ```
+
+## Running the Application
+
+### Using Maven
+
+1. Ensure the `.env` file is correctly configured.
+2. Load environment variables:
+   - **Linux / Git Bash**:
+      ```sh
+      export $(grep -v '^#' .env | xargs)
+      ```
+   - **Windows PowerShell**:
+      ```powershell
+      Get-Content .env | Where-Object { $_ -match "^\s*([^#].*?)\s*=\s*(.*?)\s*$" } | ForEach-Object { [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process') }
+      ```
+3. Build and run the project:
+   ```sh
+   ./mvnw clean install
+   ./mvnw spring-boot:run
+   ```
+
+### Using Docker
+
+1. Build the Docker image:
+   ```sh
+   docker build -t smart-home .
+   ```
+2. Run the container, exposing port 8080 and using the `.env` file:
+   ```sh
+   docker run -p 8080:8080 --env-file .env smart-home
+   ```
 
 ## API Documentation
-The API documentation is available at ```/swagger-ui``` once the application is running. You can access it by navigating to ```http://localhost:8080/swagger-ui```.
+
+API documentation is available at:
+```
+http://localhost:8080/swagger-ui
+```
 
 ## Project Structure
-The project structure is as follows:
+
 ```
-smart_home/
+SmartHomeServer/
+├── .env
+├── .gitignore
+├── .gitattributes
+├── Dockerfile
+├── mvnw
+├── mvnw.cmd
+├── pom.xml
+├── README.md
 ├── src/
 │   ├── main/
 │   │   ├── java/
-│   │   │   └── com/
-│   │   │       └── example/
-│   │   │           └── smarthome/
-│   │   │               ├── controller/
-│   │   │               ├── model/
-│   │   │               ├── repository/
-│   │   │               ├── service/
-│   │   │               └── SmartHomeApplication.java
+│   │   │   └── hcmut/
+│   │   │       └── smart_home/
+│   │   │           ├── config/
+│   │   │           ├── controller/
+│   │   │           ├── dto/
+│   │   │           ├── exception/
+│   │   │           ├── handler/
+│   │   │           ├── interceptor/
+│   │   │           ├── service/
+│   │   │           ├── util/
+│   │   │           └── Application.java
 │   │   └── resources/
 │   │       ├── application.properties
-│   │       └── static/
+│   │       └── META-INF/
 │   └── test/
 │       └── java/
-│           └── com/
-│               └── example/
-│                   └── smarthome/
-├── .gitignore
-├── mvnw
-├── [mvnw.cmd](http://_vscodecontentref_/1)
-├── [pom.xml](http://_vscodecontentref_/2)
-└── [README.md](http://_vscodecontentref_/3)
+│           └── hcmut/
+│               └── smart_home/
+└── target/
+    └── smart-home-0.0.1-SNAPSHOT.jar
+
 ```
 
-# Contributing
+## Contributing
+
 Contributions are welcome! Please fork the repository and create a pull request with your changes.
 
-# License
+## License
+
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-```License
-Feel free to customize the content as per your project's requirements.
-```

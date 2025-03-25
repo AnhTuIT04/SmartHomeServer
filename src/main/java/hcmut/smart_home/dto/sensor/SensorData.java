@@ -4,17 +4,19 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class SensorData {
-    private long ledStatus;
-    private long fanStatus;
-    private long humidity;
-    private long lightIntensity;
-    private long temperature;
+    private long ledMode;
+    private long brightness;
+    private long fanMode;
+    private double humidity;
+    private double lightIntensity;
+    private double temperature;
     private long timestamp;
     private boolean sendable = false;
 
     public SensorData() {
-        this.ledStatus = 0;
-        this.fanStatus = 0;
+        this.ledMode = 0;
+        this.fanMode = 0;
+        this.brightness = 0;
         this.humidity = 0;
         this.lightIntensity = 0;
         this.temperature = 0;
@@ -35,62 +37,65 @@ public class SensorData {
             ));
 
         this.humidity       = dataMap.get("humidity") != null 
-                                ? (long) dataMap.get("humidity")        
+                                ? ((Number) dataMap.get("humidity")).doubleValue()
                                 : humidity;
         this.lightIntensity = dataMap.get("light_intensity") != null 
-                                ? (long) dataMap.get("light_intensity") 
+                                ? ((Number) dataMap.get("light_intensity")).doubleValue() 
                                 : lightIntensity;
         this.temperature    = dataMap.get("temperature") != null 
-                                ? (long) dataMap.get("temperature")     
+                                ? ((Number) dataMap.get("temperature")).doubleValue()
                                 : temperature;
         this.timestamp      = dataMap.get("timestamp") != null 
                                 ? (long) dataMap.get("timestamp")      
                                 : timestamp;
-        this.ledStatus      = dataMap.get("button_for_led") != null 
+        this.ledMode        = dataMap.get("button_for_led") != null 
                                 ? (long) dataMap.get("button_for_led")  
-                                : ledStatus;
-        this.fanStatus      = dataMap.get("button_for_fan") != null 
+                                : ledMode;
+        this.fanMode        = dataMap.get("button_for_fan") != null 
                                 ? (long) dataMap.get("button_for_fan")  
-                                : fanStatus;
+                                : fanMode;
+        this.brightness     = dataMap.get("candel_power_for_led") != null
+                                ? (long) dataMap.get("candel_power_for_led")
+                                : brightness;
     }
 
-    public long getLedStatus() {
-        return ledStatus;
+    public long getLedMode() {
+        return ledMode;
     }
 
-    public void setLedStatus(long ledStatus) {
-        this.ledStatus = ledStatus;
+    public void setLedMode(long ledMode) {
+        this.ledMode = ledMode;
     }
 
-    public long getFanStatus() {
-        return fanStatus;
+    public long getFanMode() {
+        return fanMode;
     }
 
-    public void setFanStatus(long fanStatus) {
-        this.fanStatus = fanStatus;
+    public void setFanMode(long fanMode) {
+        this.fanMode = fanMode;
     }
 
-    public long getHumidity() {
+    public double getHumidity() {
         return humidity;
     }
 
-    public void setHumidity(long humidity) {
+    public void setHumidity(double humidity) {
         this.humidity = humidity;
     }
 
-    public long getLightIntensity() {
+    public double getLightIntensity() {
         return lightIntensity;
     }
 
-    public void setLightIntensity(long lightIntensity) {
+    public void setLightIntensity(double lightIntensity) {
         this.lightIntensity = lightIntensity;
     }
 
-    public long getTemperature() {
+    public double getTemperature() {
         return temperature;
     }
 
-    public void setTemperature(long temperature) {
+    public void setTemperature(double temperature) {
         this.temperature = temperature;
     }
 
@@ -104,8 +109,8 @@ public class SensorData {
 
     @Override
     public String toString() {
-        return String.format("{\"led_status\": %d, \"fan_status\": %d, \"humidity\": %d, \"light_intensity\": %d, \"temperature\": %d, \"timestamp\": %d}",
-                ledStatus, fanStatus, humidity, lightIntensity, temperature, timestamp);
+        return String.format("{\"led_mode\": %d, \"led_brightness\": %d, \"fan_mode\": %d, \"humidity\": %f, \"light_intensity\": %f, \"temperature\": %f, \"timestamp\": %d}",
+                ledMode, brightness, fanMode, humidity, lightIntensity, temperature, timestamp);
     }
 
     public boolean isSendable() {
@@ -114,5 +119,13 @@ public class SensorData {
 
     public void setSendable() {
         this.sendable = true;
+    }
+
+    public long getBrightness() {
+        return brightness;
+    }
+
+    public void setBrightness(long brightness) {
+        this.brightness = brightness;
     }
 }

@@ -49,14 +49,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
         try {
             URI uri = session.getUri();
             if (uri == null || uri.getQuery() == null || !uri.getQuery().startsWith("token=")) {
-                session.sendMessage(new TextMessage("{\"Error\": \"Unauthorized\"}"));
+                session.sendMessage(new TextMessage("{\"error\": \"Unauthorized\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             String token = uri.getQuery().split("token=")[1];
             if (token == null || !jwt.validateAccessToken(token)) {
-                session.sendMessage(new TextMessage("{\"Error\": \"Unauthorized\"}"));
+                session.sendMessage(new TextMessage("{\"error\": \"Unauthorized\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
@@ -64,14 +64,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
             String userId = jwt.extractId(token);
             DocumentSnapshot snapshot = firestore.collection("users").document(userId).get().get();
             if (!snapshot.exists()) {
-                session.sendMessage(new TextMessage("{\"Error\": \"User not found\"}"));
+                session.sendMessage(new TextMessage("{\"error\": \"User not found\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             String sensorId = snapshot.getString("sensorId");
             if (sensorId == null) {
-                session.sendMessage(new TextMessage("{\"Error\": \"Sensor not found\"}"));
+                session.sendMessage(new TextMessage("{\"error\": \"Sensor not found\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
@@ -139,7 +139,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     private void handleDatabaseError(WebSocketSession session, DatabaseError error) {
         try {
-            session.sendMessage(new TextMessage("{\"Error\": " + error.getMessage() + "}"));
+            session.sendMessage(new TextMessage("{\"error\": " + error.getMessage() + "}"));
             session.close(CloseStatus.SERVER_ERROR);
         } catch (IOException e) {
             logger.error("Error while closing session: " + e.getMessage());
@@ -153,23 +153,25 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
             // Parse JSON payload
             JSONObject jsonMessage = new JSONObject(payload);
-            String action = jsonMessage.optString("action");
-            String device = jsonMessage.optString("device");
-            String state = jsonMessage.optString("state");
+            String ledMode = jsonMessage.optString("led_mode");
+            String brightness = jsonMessage.optString("led_brightness");
+            String fanMode = jsonMessage.optString("fan_mode");
 
-            // Check if the message is a control message
-            if ("toggle".equals(action) && !device.isEmpty() && !state.isEmpty()) {
-                String sensorId = sessions.get(session).getSecond();
-                if (sensorId != null) {
-                    DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
-                    if ("fan".equals(device)) {
-                        controlRef.child("button_for_fan").setValueAsync("on".equals(state) ? 1 : 0);
-                    } else if ("light".equals(device)) {
-                        controlRef.child("button_for_led").setValueAsync("on".equals(state) ? 1 : 0);
-                    }
-                } else {
-                    session.sendMessage(new TextMessage("Error: Sensor not found for user."));
+            // Update real-time database
+            String sensorId = sessions.get(session).getSecond();
+            if (sensorId != null) {
+                DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
+                if (!ledMode.isEmpty()) {
+                    controlRef.child("button_for_led").setValueAsync(Long.valueOf(ledMode));
                 }
+                if (!brightness.isEmpty()) {
+                    controlRef.child("candel_power_for_led").setValueAsync(Long.valueOf(brightness));
+                }
+                if (!fanMode.isEmpty()) {
+                    controlRef.child("button_for_fan").setValueAsync(Long.valueOf(fanMode));
+                }
+            } else {
+                session.sendMessage(new TextMessage("{\"error\": \"Sensor not found for user.\"}"));
             }
         } catch (IOException | JSONException e) {
             logger.error("Error while handling message: " + e.getMessage());

@@ -21,10 +21,11 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
 
-import hcmut.smart_home.Application;
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.sensor.FilterResponse;
 import hcmut.smart_home.dto.sensor.PendingRequestResponse;
+import hcmut.smart_home.dto.sensor.SensorInfoResponse;
+import hcmut.smart_home.dto.sensor.UpdateSensorInfoRequest;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.exception.BadRequestException;
 import hcmut.smart_home.exception.ConflictException;
@@ -37,8 +38,162 @@ public class SensorService {
 
     private final Firestore firestore;
 
-    public SensorService(Firestore firestore, Application application) {
+    public SensorService(Firestore firestore) {
         this.firestore = firestore;
+    }
+
+    /**
+     * Retrieves sensor information for a given user.
+     *
+     * @param userId The ID of the user whose sensor information is to be retrieved.
+     * @return A {@link SensorInfoResponse} object containing the sensor data.
+     * @throws NotFoundException If the user does not exist, the user has no sensor assigned, 
+     *                           or the sensor does not exist.
+     * @throws InternalServerErrorException If an error occurs during the retrieval process.
+     */
+    public SensorInfoResponse getSensorInfo(String userId) {
+        try {
+            DocumentReference userDoc = firestore.collection("users").document(userId);
+            DocumentSnapshot userSnapshot = userDoc.get().get();
+            if (!userSnapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            String sensorId = userSnapshot.getString("sensorId");
+            if (sensorId == null) {
+                throw new NotFoundException("User has no sensor assigned");
+            }
+
+            DocumentReference sensorDoc = firestore.collection("sensors").document(sensorId);
+            DocumentSnapshot sensorSnapshot = sensorDoc.get().get();
+            if (!sensorSnapshot.exists()) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            return new SensorInfoResponse(sensorSnapshot.getData());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Updates the sensor information for a given user based on the provided request.
+     *
+     * @param userId The ID of the user whose sensor information is to be updated.
+     * @param request The request object containing the updated sensor information.
+     * @return A {@link SensorInfoResponse} object containing the updated sensor data.
+     * @throws NotFoundException If the user, their assigned sensor, or the sensor document does not exist.
+     * @throws InternalServerErrorException If an error occurs during the update process.
+     */
+    public SensorInfoResponse updateSensorInfo(String userId, UpdateSensorInfoRequest request) {
+        try {
+            DocumentReference userDoc = firestore.collection("users").document(userId);
+            DocumentSnapshot userSnapshot = userDoc.get().get();
+            if (!userSnapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            String sensorId = userSnapshot.getString("sensorId");
+            if (sensorId == null) {
+                throw new NotFoundException("User has no sensor assigned");
+            }
+
+            DocumentReference sensorDoc = firestore.collection("sensors").document(sensorId);
+            DocumentSnapshot sensorSnapshot = sensorDoc.get().get();
+            if (!sensorSnapshot.exists()) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            SensorInfoResponse sensorInfo = new SensorInfoResponse(sensorSnapshot.getData());
+            WriteBatch batch = firestore.batch();
+            boolean hasUpdates = false;
+            
+            if (request.getHumWarnUpper() != null) {
+                batch.update(sensorDoc, "humWarnUpper", request.getHumWarnUpper());
+                sensorInfo.setHumWarnUpper(request.getHumWarnUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getHumWarnLower() != null) {
+                batch.update(sensorDoc, "humWarnLower", request.getHumWarnLower());
+                sensorInfo.setHumWarnLower(request.getHumWarnLower());
+                hasUpdates = true;
+            }
+
+            if (request.getTempWarnUpper() != null) {
+                batch.update(sensorDoc, "tempWarnUpper", request.getTempWarnUpper());
+                sensorInfo.setTempWarnUpper(request.getTempWarnUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getTempWarnLower() != null) {
+                batch.update(sensorDoc, "tempWarnLower", request.getTempWarnLower());
+                sensorInfo.setTempWarnLower(request.getTempWarnLower());
+                hasUpdates = true;
+            }
+
+            if (request.getLightWarnUpper() != null) {
+                batch.update(sensorDoc, "lightWarnUpper", request.getLightWarnUpper());
+                sensorInfo.setLightWarnUpper(request.getLightWarnUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getLightWarnLower() != null) {
+                batch.update(sensorDoc, "lightWarnLower", request.getLightWarnLower());
+                sensorInfo.setLightWarnLower(request.getLightWarnLower());
+                hasUpdates = true;
+            }
+
+            if (request.getHumForceUpper() != null) {
+                batch.update(sensorDoc, "humForceUpper", request.getHumForceUpper());
+                sensorInfo.setHumForceUpper(request.getHumForceUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getHumForceLower() != null) {
+                batch.update(sensorDoc, "humForceLower", request.getHumForceLower());
+                sensorInfo.setHumForceLower(request.getHumForceLower());
+                hasUpdates = true;
+            }
+
+            if (request.getTempForceUpper() != null) {
+                batch.update(sensorDoc, "tempForceUpper", request.getTempForceUpper());
+                sensorInfo.setTempForceUpper(request.getTempForceUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getTempForceLower() != null) {
+                batch.update(sensorDoc, "tempForceLower", request.getTempForceLower());
+                sensorInfo.setTempForceLower(request.getTempForceLower());
+                hasUpdates = true;
+            }
+
+            if (request.getLightForceUpper() != null) {
+                batch.update(sensorDoc, "lightForceUpper", request.getLightForceUpper());
+                sensorInfo.setLightForceUpper(request.getLightForceUpper());
+                hasUpdates = true;
+            }
+
+            if (request.getLightForceLower() != null) {
+                batch.update(sensorDoc, "lightForceLower", request.getLightForceLower());
+                sensorInfo.setLightForceLower(request.getLightForceLower());
+                hasUpdates = true;
+            }
+
+            if (hasUpdates) {
+                batch.commit().get();
+            }
+
+            return sensorInfo;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
     }
 
     /**
@@ -48,7 +203,7 @@ public class SensorService {
      *
      * @param sensorId the ID of the sensor to subscribe to
      * @param userId the ID of the user subscribing to the sensor
-     * @return a SingleResponse indicating the result of the subscription operation
+     * @return a {@link SingleResponse} indicating the result of the subscription operation
      * @throws NotFoundException if the user does not exist
      * @throws ConflictException if the user already has a sensor assigned
      * @throws InternalServerErrorException if an internal server error occurs
@@ -90,10 +245,8 @@ public class SensorService {
                 // If the sensor is unassigned, assign it to the user
                 if (ownerId == null) {
                     WriteBatch batch = firestore.batch();
-                    batch.update(sensorDoc, Map.of(
-                        "ownerId", userId,
-                        "updatedAt", Timestamp.now()
-                    ));
+                    SensorInfoResponse sensorInfo = new SensorInfoResponse(sensorId, userId);
+                    batch.update(sensorDoc, sensorInfo.toMap());
                     batch.update(userDoc, "sensorId", sensorId);
     
                     // Remove any existing subscription requests for this user
@@ -132,10 +285,8 @@ public class SensorService {
     
             // If the sensor does not exist, create it and assign it to the user
             WriteBatch batch = firestore.batch();
-            batch.set(sensorDoc, Map.of(
-                "ownerId", userId,
-                "createdAt", Timestamp.now()
-            ));
+            SensorInfoResponse sensorInfo = new SensorInfoResponse(sensorId, userId);
+            batch.set(sensorDoc, sensorInfo.toMap());
             batch.update(userDoc, "sensorId", sensorId);
     
             // Remove any existing subscription requests for this user
@@ -158,7 +309,7 @@ public class SensorService {
      * Unsubscribes a user from a sensor or unassigns a sensor from its owner and removes all subscribers.
      *
      * @param userId The ID of the user to unsubscribe.
-     * @return A SingleResponse indicating the result of the operation.
+     * @return A {@link SingleResponse} indicating the result of the operation.
      * @throws NotFoundException If the user or sensor does not exist.
      * @throws BadRequestException If the user has not subscribed to any sensor.
      * @throws InternalServerErrorException If an error occurs during the operation.
@@ -257,7 +408,7 @@ public class SensorService {
      *
      * @param ownerId The ID of the owner of the sensor.
      * @param userId The ID of the user whose access is to be removed.
-     * @return A SingleResponse object containing a success message if the operation is successful.
+     * @return A {@link SingleResponse} object containing a success message if the operation is successful.
      * @throws NotFoundException If the owner or user does not exist, or if the sensor does not exist.
      * @throws BadRequestException If the owner or user is not subscribed to any sensor, or if the user is not subscribed to the owner's sensor.
      * @throws ForbiddenException If the owner does not have permission to remove the user's access, or if the owner attempts to remove their own access.
@@ -444,7 +595,7 @@ public class SensorService {
      *
      * @param userId    The ID of the user who is approving the request.
      * @param requestId The ID of the request to be approved.
-     * @return A SingleResponse object containing a success message.
+     * @return A {@link SingleResponse} object containing a success message if the request is approved successfully.
      * @throws NotFoundException         If the user, request, or sensor is not found.
      * @throws ForbiddenException        If the user is not the owner of the sensor.
      * @throws InternalServerErrorException If an error occurs during execution.
@@ -502,7 +653,7 @@ public class SensorService {
      *
      * @param userId    The ID of the user attempting to reject the request.
      * @param requestId The ID of the request to be rejected.
-     * @return A SingleResponse object containing a success message if the request is rejected successfully.
+     * @return A {@link SingleResponse} object containing a success message if the request is rejected successfully.
      * @throws NotFoundException        If the user, request, or sensor does not exist.
      * @throws ForbiddenException       If the user is not the owner of the sensor associated with the request.
      * @throws InternalServerErrorException If an error occurs during the operation.

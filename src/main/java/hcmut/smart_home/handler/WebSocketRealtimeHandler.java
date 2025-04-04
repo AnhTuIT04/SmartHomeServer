@@ -15,6 +15,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
 import com.google.firebase.database.DataSnapshot;
@@ -28,17 +29,17 @@ import hcmut.smart_home.util.Jwt;
 import hcmut.smart_home.util.Pair;
 
 @Component
-public class WebSocketHandler extends TextWebSocketHandler {
+public class WebSocketRealtimeHandler extends TextWebSocketHandler {
     private final Jwt jwt;
     private final Firestore firestore;
     private final FirebaseDatabase firebaseDatabase;
-    private static final Logger logger = LoggerFactory.getLogger(WebSocketHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketRealtimeHandler.class);
 
     private final ConcurrentHashMap<WebSocketSession, Pair<String, String>> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<WebSocketSession, ValueEventListener> sensorListeners = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<WebSocketSession, ValueEventListener> controlListeners = new ConcurrentHashMap<>();
 
-    public WebSocketHandler(Jwt jwt, Firestore firestore, FirebaseDatabase firebaseDatabase) {
+    public WebSocketRealtimeHandler(Jwt jwt, Firestore firestore, FirebaseDatabase firebaseDatabase) {
         this.jwt = jwt;
         this.firestore = firestore;
         this.firebaseDatabase = firebaseDatabase;
@@ -62,7 +63,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
             }
 
             String userId = jwt.extractId(token);
-            DocumentSnapshot snapshot = firestore.collection("users").document(userId).get().get();
+            DocumentSnapshot snapshot = getSnapshotSafely(firestore.collection("users").document(userId).get());
             if (!snapshot.exists()) {
                 session.sendMessage(new TextMessage("{\"error\": \"User not found\"}"));
                 session.close(CloseStatus.NOT_ACCEPTABLE);
@@ -124,8 +125,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
             controlRef.addValueEventListener(controlListener);
             controlListeners.put(session, controlListener);
 
-        } catch (IOException | ExecutionException | InterruptedException e) {
-            logger.error("Error while establishing connection: " + e.getMessage());
+        } catch (IOException | IllegalArgumentException | NullPointerException e) {
+            logger.error("Error while establishing connection: ", e);
+            try {
+                session.sendMessage(new TextMessage("{\"error\": \"Internal server error\"}"));
+                session.close(CloseStatus.SERVER_ERROR);
+            } catch (IOException ioException) {
+                logger.error("Error closing session: ", ioException);
+            }
         }
     }
 
@@ -191,5 +198,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
         }
 
         sessions.remove(session);
+    }
+
+    private DocumentSnapshot getSnapshotSafely(ApiFuture<DocumentSnapshot> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.error("Failed to retrieve document snapshot", e);
+            return null;
+        }
     }
 } 

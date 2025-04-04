@@ -6,21 +6,28 @@ import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor;
 
-import hcmut.smart_home.handler.WebSocketHandler;
+import hcmut.smart_home.handler.WebSocketNotificationHandler;
+import hcmut.smart_home.handler.WebSocketRealtimeHandler;
 
 @Configuration
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
-    private final WebSocketHandler webSocketHandler;
+    private final WebSocketRealtimeHandler webSocketRealtimeHandler;
+    private final WebSocketNotificationHandler webSocketNotificationHandler;
 
-    public WebSocketConfig(WebSocketHandler webSocketHandler) {
-        this.webSocketHandler = webSocketHandler;
+    public WebSocketConfig(WebSocketRealtimeHandler webSocketRealtimeHandler, WebSocketNotificationHandler webSocketNotificationHandler) {
+        this.webSocketRealtimeHandler = webSocketRealtimeHandler;
+        this.webSocketNotificationHandler = webSocketNotificationHandler;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(webSocketHandler, "/ws/realtime")
-                .addInterceptors(new HttpSessionHandshakeInterceptor()) 
-                .setAllowedOrigins("*");
+        registry.addHandler(webSocketRealtimeHandler, "/ws/realtime")
+            .addInterceptors(new HttpSessionHandshakeInterceptor())
+            .setAllowedOrigins("*");
+
+        registry.addHandler(webSocketNotificationHandler, "/ws/notification")
+            .addInterceptors(new HttpSessionHandshakeInterceptor())
+            .setAllowedOrigins("*");
     }
 }

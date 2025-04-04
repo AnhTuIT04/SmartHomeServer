@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.sensor.FilterResponse;
 import hcmut.smart_home.dto.sensor.PendingRequestResponse;
+import hcmut.smart_home.dto.sensor.SensorInfoResponse;
+import hcmut.smart_home.dto.sensor.UpdateSensorInfoRequest;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.service.SensorService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +36,34 @@ public class SensorController {
     
     public SensorController(SensorService sensorService) {
         this.sensorService = sensorService;
+    }
+
+    @GetMapping("/info")
+    @Operation(summary = "Get sensor information", tags = "Sensor")
+    @ApiResponses(value = { 
+        @ApiResponse(responseCode = "200", description = "Sensor information retrieved successfully",
+            content = @Content(schema = @Schema(implementation = SensorInfoResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Sensor/User not found",
+            content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content())
+    })
+    public ResponseEntity<SensorInfoResponse> getSensorInfo(@RequestAttribute("userId") String userId) {
+        return ResponseEntity.ok().body(sensorService.getSensorInfo(userId));
+    }
+
+    @PutMapping("/info")
+    @Operation(summary = "Update sensor information", tags = "Sensor")
+    @ApiResponses(value = { 
+        @ApiResponse(responseCode = "200", description = "Sensor information updated successfully",
+            content = @Content(schema = @Schema(implementation = SensorInfoResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Sensor/User not found",
+            content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content())
+    })
+    public ResponseEntity<SensorInfoResponse> updateSensorInfo(@RequestAttribute("userId") String userId, @RequestBody final UpdateSensorInfoRequest request) {
+        return ResponseEntity.ok().body(sensorService.updateSensorInfo(userId, request));
     }
 
     @PostMapping("/{sensorId}/user/subscribe")
@@ -63,7 +94,7 @@ public class SensorController {
                 content = @Content())
     })
     @Operation(summary = "Unsubscribe from a sensor, if subscriber is the owner, sensor will be unassigned and all subscribers will be removed", tags = "Sensor")
-    public ResponseEntity<SingleResponse> unsubscribe( @RequestAttribute("userId") String userId) {
+    public ResponseEntity<SingleResponse> unsubscribe(@RequestAttribute("userId") String userId) {
         return ResponseEntity.ok().body(sensorService.unsubscribe(userId));
     }
 
@@ -91,7 +122,7 @@ public class SensorController {
     @GetMapping("/user/subscribers")
     @ApiResponses(value = { 
         @ApiResponse(responseCode = "200", description = "Get subscribers successfully",
-            content = @Content(schema = @Schema(implementation = PendingRequestResponse[].class))),
+            content = @Content(schema = @Schema(implementation = UserResponse[].class))),
         @ApiResponse(responseCode = "404", description = "Sensor/User not found",
             content = @Content()),
         @ApiResponse(responseCode = "403", description = "User is not the owner of the sensor",

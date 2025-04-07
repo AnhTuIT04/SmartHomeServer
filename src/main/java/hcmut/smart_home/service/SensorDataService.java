@@ -113,61 +113,71 @@ public class SensorDataService {
     private void checkThreshold(String sensorId, SensorData data) {
         Instant now = Instant.now();
         Instant lastNotification = lastNotificationTimes.get(sensorId);
-
+    
         if (lastNotification == null || now.isAfter(lastNotification.plusSeconds(COOLDOWN_SECONDS))) {
             try {
                 DocumentSnapshot sensorSnapshot = firestore.collection("sensors").document(sensorId).get().get();
                 SensorInfoResponse sensorInfo = new SensorInfoResponse(sensorSnapshot.getData());
-
+    
                 double light = data.getLightIntensity();
                 double humidity = data.getHumidity();
                 double temp = data.getTemperature();
-
-                // Force control and notification
+    
+                // Create a new notification
+                NotificationResponse notification = notificationService.createNotification(sensorId);
+    
+                // Check for force conditions and add to notification
                 if (light > sensorInfo.getLightForceUpper()) {
-                    sendNotification(sensorId, Type.LIGHT_INTENSITY, Mode.FORCE);
+                    notification.addDetail(Type.LIGHT_INTENSITY, Mode.FORCE);
                     forceControl(sensorId, Type.LIGHT_INTENSITY, true);
-                    lastNotificationTimes.put(sensorId, now);
                 } else if (light < sensorInfo.getLightForceLower()) {
-                    sendNotification(sensorId, Type.LIGHT_INTENSITY, Mode.FORCE);
+                    notification.addDetail(Type.LIGHT_INTENSITY, Mode.FORCE);
                     forceControl(sensorId, Type.LIGHT_INTENSITY, false);
-                    lastNotificationTimes.put(sensorId, now);
-                } else if (humidity > sensorInfo.getHumForceUpper()) {
-                    sendNotification(sensorId, Type.HUMIDITY, Mode.FORCE);
+                }
+    
+                if (humidity > sensorInfo.getHumForceUpper()) {
+                    notification.addDetail(Type.HUMIDITY, Mode.FORCE);
                     forceControl(sensorId, Type.HUMIDITY, true);
-                    lastNotificationTimes.put(sensorId, now);
                 } else if (humidity < sensorInfo.getHumForceLower()) {
-                    sendNotification(sensorId, Type.HUMIDITY, Mode.FORCE);
+                    notification.addDetail(Type.HUMIDITY, Mode.FORCE);
                     forceControl(sensorId, Type.HUMIDITY, false);
-                    lastNotificationTimes.put(sensorId, now);
-                } else if (temp > sensorInfo.getTempForceUpper()) {
-                    sendNotification(sensorId, Type.TEMPERATURE, Mode.FORCE);
+                }
+    
+                if (temp > sensorInfo.getTempForceUpper()) {
+                    notification.addDetail(Type.TEMPERATURE, Mode.FORCE);
                     forceControl(sensorId, Type.TEMPERATURE, true);
-                    lastNotificationTimes.put(sensorId, now);
                 } else if (temp < sensorInfo.getTempForceLower()) {
-                    sendNotification(sensorId, Type.TEMPERATURE, Mode.FORCE);
+                    notification.addDetail(Type.TEMPERATURE, Mode.FORCE);
                     forceControl(sensorId, Type.TEMPERATURE, false);
+                }
+    
+                // Check for warning conditions and add to notification
+                if (!hasForceType(notification, Type.LIGHT_INTENSITY) &&
+                    (light > sensorInfo.getLightWarnUpper() || light < sensorInfo.getLightWarnLower())) {
+                    notification.addDetail(Type.LIGHT_INTENSITY, Mode.WARN);
+                }
+                if (!hasForceType(notification, Type.HUMIDITY) &&
+                    (humidity > sensorInfo.getHumWarnUpper() || humidity < sensorInfo.getHumWarnLower())) {
+                    notification.addDetail(Type.HUMIDITY, Mode.WARN);
+                }
+                if (!hasForceType(notification, Type.TEMPERATURE) &&
+                    (temp > sensorInfo.getTempWarnUpper() || temp < sensorInfo.getTempWarnLower())) {
+                    notification.addDetail(Type.TEMPERATURE, Mode.WARN);
+                }
+    
+                // Send notification if there are any details
+                if (!notification.getDetails().isEmpty()) {
+                    sendNotification(notification);
                     lastNotificationTimes.put(sensorId, now);
                 }
-                // Warning notification only
-                else if (light > sensorInfo.getLightWarnUpper() || light < sensorInfo.getLightWarnLower()) {
-                    sendNotification(sensorId, Type.LIGHT_INTENSITY, Mode.WARN);
-                    lastNotificationTimes.put(sensorId, now);
-                } else if (humidity > sensorInfo.getHumWarnUpper() || humidity < sensorInfo.getHumWarnLower()) {
-                    sendNotification(sensorId, Type.HUMIDITY, Mode.WARN);
-                    lastNotificationTimes.put(sensorId, now);
-                } else if (temp > sensorInfo.getTempWarnUpper() || temp < sensorInfo.getTempWarnLower()) {
-                    sendNotification(sensorId, Type.TEMPERATURE, Mode.WARN);
-                    lastNotificationTimes.put(sensorId, now);
-                }
-
-            } catch (ExecutionException | InterruptedException e) {
+    
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.error("Interrupted while checking threshold for sensor {}: ", sensorId, e);
+            } catch (ExecutionException e) {
                 logger.error("Error executing Firestore query for sensor {}: ", sensorId, e);
-                Thread.currentThread().interrupt(); // Restore interrupt status if InterruptedException occurs
-            } catch (NullPointerException e) {
-                logger.error("Null data encountered for sensor {}: ", sensorId, e);
-            } catch (IllegalArgumentException e) {
-                logger.error("Invalid argument while processing sensor {}: ", sensorId, e);
+            } catch (Exception e) {
+                logger.error("Unexpected error checking threshold for sensor {}: ", sensorId, e);
             }
         } else {
             logger.info("Sensor {} is in cooldown, skipping check.", sensorId);
@@ -190,6 +200,11 @@ public class SensorDataService {
         } catch (Exception e) {
             logger.error("Error controlling sensor {}: ", sensorId, e);
         }
+    }
+
+    private boolean hasForceType(NotificationResponse notification, Type type) {
+        return notification.getDetails().stream()
+                .anyMatch(pair -> pair.getType() == type && pair.getMode() == Mode.FORCE);
     }
 
     private void adjustFanLevel(DatabaseReference controlRef, boolean isUpper) {
@@ -246,10 +261,9 @@ public class SensorDataService {
         });
     }
 
-    private void sendNotification(String sensorId, Type type, Mode mode) {
-        NotificationResponse notification = notificationService.createNotification(sensorId, type, mode);
+    private void sendNotification(NotificationResponse notification) {
         String message = notification.toString();
-        webSocketNotificationHandler.sendNotification(sensorId, message);
-        logger.info("Notification sent for sensor {}: {}", sensorId, message);
+        webSocketNotificationHandler.sendNotification(notification.getSensorId(), message);
+        notificationService.saveNotification(notification);
     }
 }

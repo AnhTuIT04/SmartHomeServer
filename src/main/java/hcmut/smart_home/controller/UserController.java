@@ -1,5 +1,7 @@
 package hcmut.smart_home.controller;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import hcmut.smart_home.config.PublicEndpoint;
 import hcmut.smart_home.dto.SingleResponse;
+import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
@@ -141,5 +144,11 @@ public class UserController {
     })
     public ResponseEntity<SingleResponse> changePassword(@Valid @RequestBody final ChangePasswordRequest request, @RequestAttribute("userId") String userId) {
         return ResponseEntity.status(HttpStatus.OK).body(userService.changePassword(request, userId));
+    }
+
+    @GetMapping("/me/notifications")
+    @Operation(summary = "Get user notifications", tags = "User Management")
+    public ResponseEntity<List<NotificationResponse>> getUserNotifications(@RequestAttribute("userId") String userId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserNotifications(userId));
     }
 }

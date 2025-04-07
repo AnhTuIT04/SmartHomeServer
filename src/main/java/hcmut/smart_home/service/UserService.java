@@ -17,6 +17,7 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 
 import hcmut.smart_home.dto.SingleResponse;
+import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
@@ -25,6 +26,7 @@ import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
 import hcmut.smart_home.dto.user.UserResponse;
+import hcmut.smart_home.exception.BadRequestException;
 import hcmut.smart_home.exception.ConflictException;
 import hcmut.smart_home.exception.InternalServerErrorException;
 import hcmut.smart_home.exception.NotFoundException;
@@ -39,11 +41,13 @@ public class UserService {
     private final Firestore firestore;
     private final Jwt jwt;
     private final CloudinaryUtil cloudinaryUtil;
+    private final NotificationService notificationService;
 
-    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil) {
+    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService) {
         this.firestore = firestore;
         this.jwt = jwt;
         this.cloudinaryUtil = cloudinaryUtil;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -347,7 +351,40 @@ public class UserService {
         }
     }
 
-    
+    public List<NotificationResponse> getUserNotifications(String userId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Extract the sensor ID
+            String sensorId = snapshot.getString("sensorId");
+            if (sensorId == null) {
+                throw new BadRequestException("User has not subscribed to any sensor.");
+            }
+
+            // Check if the sensor ID is valid
+            DocumentReference sensorDoc = firestore.collection("sensors").document(sensorId);
+            DocumentSnapshot sensorSnapshot = sensorDoc.get().get();
+            if (!sensorSnapshot.exists()) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            return notificationService.getNotifications(sensorId);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
     /**
      * Checks if the given email is already taken by another user in the Firestore collection.
      *

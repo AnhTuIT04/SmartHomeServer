@@ -51,7 +51,7 @@ public class NotificationService {
                     .whereEqualTo("sensorId", sensorId)
                     .get()
                     .get()
-                    .forEach(doc -> notifications.add(doc.toObject(NotificationResponse.class)));
+                    .forEach(doc -> notifications.add(new NotificationResponse(doc.getData())));
 
             return notifications;
         } catch (InterruptedException e) {

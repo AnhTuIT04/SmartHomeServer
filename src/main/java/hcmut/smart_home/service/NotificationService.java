@@ -26,13 +26,12 @@ public class NotificationService {
      * Creates a new notification for a specified sensor.
      *
      * @param sensorId The ID of the sensor for which the notification is created.
-     * @param message The message content of the notification.
      * @param type The type of the notification, represented by {@link NotificationResponse.NotificationType}.
      * @return A {@link NotificationResponse} object containing the details of the created notification.
      * @throws NotFoundException If the sensor with the specified ID does not exist.
      * @throws InternalServerErrorException If an error occurs during the notification creation process.
      */
-    public NotificationResponse createNotification(String sensorId, String message, NotificationResponse.Type type, NotificationResponse.Mode mode) {
+    public NotificationResponse createNotification(String sensorId, NotificationResponse.Type type, NotificationResponse.Mode mode) {
         try {
             DocumentReference sensorDoc = firestore.collection("sensors").document(sensorId);
             DocumentSnapshot sensorSnapshot = sensorDoc.get().get();
@@ -42,9 +41,22 @@ public class NotificationService {
 
             DocumentReference docRef = firestore.collection("notifications").document();
             String notificationId = docRef.getId();
-            NotificationResponse notification = new NotificationResponse(notificationId, sensorId, message, type, mode);
+            NotificationResponse notification = new NotificationResponse(notificationId, sensorId, type, mode);
             docRef.set(notification).get();
 
+            return notification;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    public NotificationResponse createNotification(NotificationResponse notification) {
+        try {
+            DocumentReference docRef = firestore.collection("notifications").document(notification.getId());
+            docRef.set(notification).get();
             return notification;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

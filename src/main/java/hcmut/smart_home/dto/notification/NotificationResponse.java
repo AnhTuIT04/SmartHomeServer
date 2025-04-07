@@ -6,15 +6,13 @@ public class NotificationResponse {
 
     private String id;
     private String sensorId;
-    private String message;
     private Type type;
     private Mode mode;
     private long timestamp;
 
-    public NotificationResponse(String id, String sensorId, String message, Type type, Mode mode) {
+    public NotificationResponse(String id, String sensorId, Type type, Mode mode) {
         this.id = id;
         this.sensorId = sensorId;
-        this.message = message;
         this.type = type;
         this.mode = mode;
         this.timestamp = System.currentTimeMillis();
@@ -34,14 +32,6 @@ public class NotificationResponse {
 
     public void setSensorId(String sensorId) {
         this.sensorId = sensorId;
-    }
-
-    public String getMessage() {
-        return message;
-    }
-
-    public void setMessage(String message) {
-        this.message = message;
     }
 
     public Type getType() {
@@ -70,6 +60,6 @@ public class NotificationResponse {
 
     @Override
     public String toString() {
-        return "{\"id\": \"" + id + "\", \"sensorId\": \"" + sensorId + "\", \"message\": \"" + message + "\", \"type\": \"" + type + "\", \"mode\": \"" + mode + "\", \"timestamp\": " + timestamp + "}";
+        return "{\"id\": \"" + id + "\", \"sensorId\": \"" + sensorId + "\", \"type\": \"" + type + "\", \"mode\": \"" + mode + "\", \"timestamp\": " + timestamp + "}";
     }
 }

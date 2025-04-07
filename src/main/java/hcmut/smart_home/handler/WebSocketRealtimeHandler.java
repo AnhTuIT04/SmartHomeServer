@@ -30,14 +30,15 @@ import hcmut.smart_home.util.Pair;
 
 @Component
 public class WebSocketRealtimeHandler extends TextWebSocketHandler {
-    private final Jwt jwt;
-    private final Firestore firestore;
-    private final FirebaseDatabase firebaseDatabase;
-    private static final Logger logger = LoggerFactory.getLogger(WebSocketRealtimeHandler.class);
 
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketRealtimeHandler.class);
     private final ConcurrentHashMap<WebSocketSession, Pair<String, String>> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<WebSocketSession, ValueEventListener> sensorListeners = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<WebSocketSession, ValueEventListener> controlListeners = new ConcurrentHashMap<>();
+
+    private final Jwt jwt;
+    private final Firestore firestore;
+    private final FirebaseDatabase firebaseDatabase;
 
     public WebSocketRealtimeHandler(Jwt jwt, Firestore firestore, FirebaseDatabase firebaseDatabase) {
         this.jwt = jwt;
@@ -48,108 +49,32 @@ public class WebSocketRealtimeHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         try {
-            URI uri = session.getUri();
-            if (uri == null || uri.getQuery() == null || !uri.getQuery().startsWith("token=")) {
-                session.sendMessage(new TextMessage("{\"error\": \"Unauthorized\"}"));
-                session.close(CloseStatus.NOT_ACCEPTABLE);
-                return;
-            }
-
-            String token = uri.getQuery().split("token=")[1];
+            String token = extractTokenFromUri(session.getUri());
             if (token == null || !jwt.validateAccessToken(token)) {
-                session.sendMessage(new TextMessage("{\"error\": \"Unauthorized\"}"));
-                session.close(CloseStatus.NOT_ACCEPTABLE);
+                sendAndClose(session, "{\"error\": \"Unauthorized\"}", CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             String userId = jwt.extractId(token);
-            DocumentSnapshot snapshot = getSnapshotSafely(firestore.collection("users").document(userId).get());
-            if (!snapshot.exists()) {
-                session.sendMessage(new TextMessage("{\"error\": \"User not found\"}"));
-                session.close(CloseStatus.NOT_ACCEPTABLE);
+            DocumentSnapshot userSnapshot = getSnapshotSafely(firestore.collection("users").document(userId).get());
+            if (userSnapshot == null || !userSnapshot.exists()) {
+                sendAndClose(session, "{\"error\": \"User not found\"}", CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
-            String sensorId = snapshot.getString("sensorId");
+            String sensorId = userSnapshot.getString("sensorId");
             if (sensorId == null) {
-                session.sendMessage(new TextMessage("{\"error\": \"Sensor not found\"}"));
-                session.close(CloseStatus.NOT_ACCEPTABLE);
+                sendAndClose(session, "{\"error\": \"Sensor not found\"}", CloseStatus.NOT_ACCEPTABLE);
                 return;
             }
 
             sessions.put(session, new Pair<>(userId, sensorId));
+            setupRealtimeListeners(session, sensorId);
+            logger.info("New WebSocket connection for userId: {}, sensorId: {}, session: {}", userId, sensorId, session.getId());
 
-            DatabaseReference sensorRef = firebaseDatabase.getReference(sensorId);
-            DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
-            SensorData data = new SensorData();
-
-            ValueEventListener sensorListener = new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot snapshot) {
-                    if (snapshot.exists()) {
-                        data.updateData(snapshot.getValue());
-                        if (!data.isSendable()) {
-                            data.setSendable();
-                        } else {
-                            sendDataToClient(session, data);
-                        }
-                    }
-                }
-
-                @Override
-                public void onCancelled(DatabaseError error) {
-                    handleDatabaseError(session, error);
-                }
-            };
-            sensorRef.addValueEventListener(sensorListener);
-            sensorListeners.put(session, sensorListener);
-
-            ValueEventListener controlListener = new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot snapshot) {
-                    if (snapshot.exists()) {
-                        data.updateData(snapshot.getValue());
-                        if (!data.isSendable()) {
-                            data.setSendable();
-                        } else {
-                            sendDataToClient(session, data);
-                        }
-                    }
-                }
-
-                @Override
-                public void onCancelled(DatabaseError error) {
-                    handleDatabaseError(session, error);
-                }
-            };
-            controlRef.addValueEventListener(controlListener);
-            controlListeners.put(session, controlListener);
-
-        } catch (IOException | IllegalArgumentException | NullPointerException e) {
-            logger.error("Error while establishing connection: ", e);
-            try {
-                session.sendMessage(new TextMessage("{\"error\": \"Internal server error\"}"));
-                session.close(CloseStatus.SERVER_ERROR);
-            } catch (IOException ioException) {
-                logger.error("Error closing session: ", ioException);
-            }
-        }
-    }
-
-    private void sendDataToClient(WebSocketSession session, SensorData data) {
-        try {
-            session.sendMessage(new TextMessage(data.toString()));
-        } catch (IOException e) {
-            logger.error("Error while sending data to client: " + e.getMessage());
-        }
-    }
-
-    private void handleDatabaseError(WebSocketSession session, DatabaseError error) {
-        try {
-            session.sendMessage(new TextMessage("{\"error\": " + error.getMessage() + "}"));
-            session.close(CloseStatus.SERVER_ERROR);
-        } catch (IOException e) {
-            logger.error("Error while closing session: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error while establishing connection for session {}: ", session.getId(), e);
+            sendAndClose(session, "{\"error\": \"Internal server error\"}", CloseStatus.SERVER_ERROR);
         }
     }
 
@@ -157,55 +82,153 @@ public class WebSocketRealtimeHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             String payload = message.getPayload();
-
-            // Parse JSON payload
             JSONObject jsonMessage = new JSONObject(payload);
             String ledMode = jsonMessage.optString("led_mode");
             String brightness = jsonMessage.optString("led_brightness");
             String fanMode = jsonMessage.optString("fan_mode");
 
-            // Update real-time database
-            String sensorId = sessions.get(session).getSecond();
-            if (sensorId != null) {
-                DatabaseReference controlRef = firebaseDatabase.getReference(sensorId + "_control");
-                if (!ledMode.isEmpty()) {
-                    controlRef.child("button_for_led").setValueAsync(Long.valueOf(ledMode));
-                }
-                if (!brightness.isEmpty()) {
-                    controlRef.child("candel_power_for_led").setValueAsync(Long.valueOf(brightness));
-                }
-                if (!fanMode.isEmpty()) {
-                    controlRef.child("button_for_fan").setValueAsync(Long.valueOf(fanMode));
-                }
-            } else {
-                session.sendMessage(new TextMessage("{\"error\": \"Sensor not found for user.\"}"));
+            Pair<String, String> sessionData = sessions.get(session);
+            if (sessionData == null) {
+                sendAndClose(session, "{\"error\": \"Session not found\"}", CloseStatus.NOT_ACCEPTABLE);
+                return;
             }
-        } catch (IOException | JSONException e) {
-            logger.error("Error while handling message: " + e.getMessage());
+
+            String sensorId = sessionData.getSecond();
+            DatabaseReference controlRef = firebaseDatabase.getReference("control/" + sensorId);
+
+            if (!ledMode.isEmpty()) {
+                controlRef.child("button_for_led").setValueAsync(Long.valueOf(ledMode));
+            }
+            if (!brightness.isEmpty()) {
+                controlRef.child("candel_power_for_led").setValueAsync(Long.valueOf(brightness));
+            }
+            if (!fanMode.isEmpty()) {
+                controlRef.child("button_for_fan").setValueAsync(Long.valueOf(fanMode));
+            }
+
+            logger.info("Updated control data for sensorId: {}", sensorId);
+        } catch (JSONException e) {
+            logger.error("Error handling message for session {}: ", session.getId(), e);
+            sendAndClose(session, "{\"error\": \"Invalid message format\"}", CloseStatus.BAD_DATA);
         }
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        if (sensorListeners.containsKey(session)) {
-            DatabaseReference sensorRef = firebaseDatabase.getReference(sessions.get(session).getSecond());
-            sensorRef.removeEventListener(sensorListeners.remove(session));
-        }
-        
-        if (controlListeners.containsKey(session)) {
-            DatabaseReference controlRef = firebaseDatabase.getReference(sessions.get(session).getSecond() + "_control");
-            controlRef.removeEventListener(controlListeners.remove(session));
-        }
+        cleanupSession(session);
+        logger.info("WebSocket connection closed: {} with status: {}", session.getId(), status);
+    }
 
-        sessions.remove(session);
+    @Override
+    public void handleTransportError(WebSocketSession session, Throwable exception) {
+        logger.error("WebSocket error for session {}: ", session.getId(), exception);
+        cleanupSession(session);
+    }
+
+    private void setupRealtimeListeners(WebSocketSession session, String sensorId) {
+        SensorData data = new SensorData();
+        DatabaseReference sensorRef = firebaseDatabase.getReference("data/" + sensorId);
+        DatabaseReference controlRef = firebaseDatabase.getReference("control/" + sensorId);
+
+        ValueEventListener sensorListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                if (snapshot.exists()) {
+                    data.updateData(snapshot.getValue());
+                    if (data.isSendable()) {
+                        sendDataToClient(session, data);
+                    } else {
+                        data.setSendable();
+                    }
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                handleDatabaseError(session, error);
+            }
+        };
+        sensorRef.addValueEventListener(sensorListener);
+        sensorListeners.put(session, sensorListener);
+
+        ValueEventListener controlListener = new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot snapshot) {
+                if (snapshot.exists()) {
+                    data.updateData(snapshot.getValue());
+                    if (data.isSendable()) {
+                        sendDataToClient(session, data);
+                    } else {
+                        data.setSendable();
+                    }
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError error) {
+                handleDatabaseError(session, error);
+            }
+        };
+        controlRef.addValueEventListener(controlListener);
+        controlListeners.put(session, controlListener);
+    }
+
+    private void sendDataToClient(WebSocketSession session, SensorData data) {
+        try {
+            if (session.isOpen()) {
+                session.sendMessage(new TextMessage(data.toString()));
+                logger.debug("Sent data to session {}: {}", session.getId(), data);
+            }
+        } catch (IOException e) {
+            logger.error("Error sending data to session {}: ", session.getId(), e);
+        }
+    }
+
+    private void handleDatabaseError(WebSocketSession session, DatabaseError error) {
+        logger.error("Database error for session {}: {}", session.getId(), error.getMessage());
+        sendAndClose(session, "{\"error\": \"" + error.getMessage() + "\"}", CloseStatus.SERVER_ERROR);
+    }
+
+    private void cleanupSession(WebSocketSession session) {
+        Pair<String, String> sessionData = sessions.remove(session);
+        if (sessionData != null) {
+            String sensorId = sessionData.getSecond();
+            ValueEventListener sensorListener = sensorListeners.remove(session);
+            if (sensorListener != null) {
+                firebaseDatabase.getReference(sensorId).removeEventListener(sensorListener);
+            }
+            ValueEventListener controlListener = controlListeners.remove(session);
+            if (controlListener != null) {
+                firebaseDatabase.getReference(sensorId + "_control").removeEventListener(controlListener);
+            }
+        }
+    }
+
+    private String extractTokenFromUri(URI uri) {
+        if (uri == null || uri.getQuery() == null || !uri.getQuery().startsWith("token=")) {
+            return null;
+        }
+        String[] queryParts = uri.getQuery().split("token=");
+        return queryParts.length > 1 ? queryParts[1] : null;
+    }
+
+    private void sendAndClose(WebSocketSession session, String message, CloseStatus status) {
+        try {
+            if (session.isOpen()) {
+                session.sendMessage(new TextMessage(message));
+                session.close(status);
+            }
+        } catch (IOException e) {
+            logger.error("Error sending message or closing session {}: ", session.getId(), e);
+        }
     }
 
     private DocumentSnapshot getSnapshotSafely(ApiFuture<DocumentSnapshot> future) {
         try {
             return future.get();
         } catch (InterruptedException | ExecutionException e) {
-            logger.error("Failed to retrieve document snapshot", e);
+            logger.error("Failed to retrieve document snapshot: ", e);
             return null;
         }
     }
-} 
+}

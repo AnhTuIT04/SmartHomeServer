@@ -95,6 +95,20 @@ public class WebSocketNotificationHandler extends TextWebSocketHandler {
         }
     }
 
+    public void sendNotificationToUser(String userId, String message) {
+        for (WebSocketSession session : sessionSensorMap.keySet()) {
+            String assignedUserId = jwt.extractId(extractTokenFromUri(session.getUri()));
+            if (session.isOpen() && userId.equals(assignedUserId)) {
+                try {
+                    session.sendMessage(new TextMessage(message));
+                    logger.info("Sent notification to user {}: {}", userId, message);
+                } catch (IOException e) {
+                    logger.error("Error sending message to user {}: ", userId, e);
+                }
+            }
+        }
+    }
+
     private String extractTokenFromUri(URI uri) {
         if (uri == null || uri.getQuery() == null || !uri.getQuery().startsWith("token=")) {
             return null;

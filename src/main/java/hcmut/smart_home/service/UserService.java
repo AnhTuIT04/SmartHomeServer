@@ -20,14 +20,18 @@ import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
+import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
+import hcmut.smart_home.dto.user.ModeConfigResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
+import hcmut.smart_home.dto.user.UpdateModeConfigRequest;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.exception.BadRequestException;
 import hcmut.smart_home.exception.ConflictException;
+import hcmut.smart_home.exception.ForbiddenException;
 import hcmut.smart_home.exception.InternalServerErrorException;
 import hcmut.smart_home.exception.NotFoundException;
 import hcmut.smart_home.exception.UnauthorizedException;
@@ -42,12 +46,14 @@ public class UserService {
     private final Jwt jwt;
     private final CloudinaryUtil cloudinaryUtil;
     private final NotificationService notificationService;
+    private final SensorDataService sensorDataService;
 
-    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService) {
+    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService, SensorDataService sensorDataService) {
         this.firestore = firestore;
         this.jwt = jwt;
         this.cloudinaryUtil = cloudinaryUtil;
         this.notificationService = notificationService;
+        this.sensorDataService = sensorDataService;
     }
 
     /**
@@ -351,6 +357,15 @@ public class UserService {
         }
     }
 
+    /**
+     * Retrieves the list of notifications for a specific user based on their subscribed sensor.
+     *
+     * @param userId The ID of the user whose notifications are to be retrieved.
+     * @return A list of {@link NotificationResponse} objects containing the user's notifications.
+     * @throws NotFoundException If the user or the associated sensor is not found.
+     * @throws BadRequestException If the user has not subscribed to any sensor.
+     * @throws InternalServerErrorException If an error occurs while fetching data from Firestore.
+     */
     public List<NotificationResponse> getUserNotifications(String userId) {
         try {
             // Get reference to the user document in Firestore
@@ -377,6 +392,329 @@ public class UserService {
 
             return notificationService.getNotifications(sensorId);
 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Creates a new mode configuration for a user.
+     *
+     * @param userId The ID of the user for whom the mode configuration is being created.
+     * @param request The request object containing the details of the mode configuration.
+     * @return A SingleResponse object indicating the success of the operation.
+     * @throws NotFoundException If the user with the given ID does not exist.
+     * @throws ConflictException If a mode configuration with the same name already exists for the user.
+     * @throws InternalServerErrorException If an error occurs during the operation.
+     */
+    public SingleResponse createModeConfig(String userId, CreateModeConfigRequest request) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Check if a mode configuration with the same name already exists for the user
+            CollectionReference modeConfigsCollection = firestore.collection("mode_configs");
+            Query nameQuery = modeConfigsCollection.whereEqualTo("userId", userId)
+                                                   .whereEqualTo("name", request.getName());
+            List<QueryDocumentSnapshot> existingConfigs = nameQuery.get().get().getDocuments();
+
+            if (!existingConfigs.isEmpty()) {
+                throw new ConflictException("Mode configuration with the same name already exists");
+            }
+
+            // Create a new mode configuration document
+            DocumentReference modeConfigDocRef = modeConfigsCollection.document();
+            ModeConfigResponse modeConfig = new ModeConfigResponse(
+                    modeConfigDocRef.getId(),
+                    userId,
+                    request.getName(),
+                    request.getLedMode(),
+                    request.getBrightness(),
+                    request.getFanMode()
+            );
+            modeConfigDocRef.set(modeConfig).get();
+
+            return new SingleResponse("Mode configuration created successfully");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Retrieves the mode configurations associated with a specific user.
+     *
+     * @param userId The ID of the user whose mode configurations are to be retrieved.
+     * @return A list of {@link ModeConfigResponse} objects representing the user's mode configurations.
+     * @throws NotFoundException If the user with the specified ID does not exist.
+     * @throws InternalServerErrorException If an error occurs while retrieving data from Firestore.
+     */
+    public List<ModeConfigResponse> getUserModeConfigs(String userId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Retrieve the mode configurations for the user
+            CollectionReference modeConfigsCollection = firestore.collection("mode_configs");
+            Query userModeConfigsQuery = modeConfigsCollection.whereEqualTo("userId", userId);
+            List<QueryDocumentSnapshot> modeConfigDocs = userModeConfigsQuery.get().get().getDocuments();
+
+            return modeConfigDocs.stream().map(doc -> {
+                String id = doc.getId();
+                String uid = doc.getString("userId");
+                String name = doc.getString("name");
+                long ledMode = safeGetLong(doc, "ledMode", 0);
+                long brightness = safeGetLong(doc, "brightness", 0);
+                long fanMode = safeGetLong(doc, "fanMode", 0);
+                return new ModeConfigResponse(id, uid, name, ledMode, brightness, fanMode);
+            }).toList();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Retrieves the mode configuration for a specific user and mode.
+     *
+     * @param userId The ID of the user whose mode configuration is being retrieved.
+     * @param modeId The ID of the mode configuration to retrieve.
+     * @return A {@link ModeConfigResponse} object containing the mode configuration details.
+     * @throws NotFoundException If the user or mode configuration is not found.
+     * @throws ForbiddenException If the mode configuration does not belong to the user.
+     * @throws InternalServerErrorException If an error occurs during the retrieval process.
+     */
+    public ModeConfigResponse getModeConfig(String userId, String modeId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Retrieve the mode configuration for the user
+            DocumentReference modeConfigDocRef = firestore.collection("mode_configs").document(modeId);
+            DocumentSnapshot modeConfigDoc = modeConfigDocRef.get().get();
+
+            if (!modeConfigDoc.exists()) {
+                throw new NotFoundException("Mode configuration not found");
+            }
+
+            // Check if the mode configuration belongs to the user
+            String modeUserId = modeConfigDoc.getString("userId");
+            if (!userId.equals(modeUserId)) {
+                throw new ForbiddenException("You do not have permission to access this mode configuration");
+            }
+
+            String uid = modeConfigDoc.getString("userId");
+            String name = modeConfigDoc.getString("name");
+            long ledMode = safeGetLong(modeConfigDoc, "ledMode", 0);
+            long brightness = safeGetLong(modeConfigDoc, "brightness", 0);
+            long fanMode = safeGetLong(modeConfigDoc, "fanMode", 0);
+
+            return new ModeConfigResponse(modeId, uid, name, ledMode, brightness, fanMode);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Updates the mode configuration for a specific user.
+     *
+     * @param userId  The ID of the user whose mode configuration is being updated.
+     * @param modeId  The ID of the mode configuration to update.
+     * @param request The request object containing the updated mode configuration details.
+     * @return A SingleResponse indicating the success of the update operation.
+     * @throws NotFoundException         If the user or mode configuration is not found.
+     * @throws ForbiddenException        If the mode configuration does not belong to the user.
+     * @throws InternalServerErrorException If an error occurs during the update process.
+     */
+    public SingleResponse updateModeConfig(String userId, String modeId, UpdateModeConfigRequest request) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Retrieve the mode configuration for the user
+            DocumentReference modeConfigDocRef = firestore.collection("mode_configs").document(modeId);
+            DocumentSnapshot modeConfigDoc = modeConfigDocRef.get().get();
+
+            if (!modeConfigDoc.exists()) {
+                throw new NotFoundException("Mode configuration not found");
+            }
+
+            // Check if the mode configuration belongs to the user
+            String modeUserId = modeConfigDoc.getString("userId");
+            if (!userId.equals(modeUserId)) {
+                throw new ForbiddenException("You do not have permission to access this mode configuration");
+            }
+
+            // Create a batch write
+            WriteBatch batch = firestore.batch();
+            boolean hasUpdates = false;
+
+            // Update fields if new values are provided
+            if (request.getName() != null) {
+                batch.update(modeConfigDocRef, "name", request.getName());
+                hasUpdates = true;
+            }
+
+            if (request.getLedMode() != null) {
+                batch.update(modeConfigDocRef, "ledMode", request.getLedMode());
+                hasUpdates = true;
+            }
+
+            if (request.getBrightness() != null) {
+                batch.update(modeConfigDocRef, "brightness", request.getBrightness());
+                hasUpdates = true;
+            }
+
+            if (request.getFanMode() != null) {
+                batch.update(modeConfigDocRef, "fanMode", request.getFanMode());
+                hasUpdates = true;
+            }
+
+            // Commit batch updates if there are any changes
+            if (hasUpdates) {
+                batch.commit().get();
+            }
+
+            return new SingleResponse("Mode configuration updated successfully");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Deletes a mode configuration for a specific user.
+     *
+     * @param userId The ID of the user who owns the mode configuration.
+     * @param modeId The ID of the mode configuration to be deleted.
+     * @return A SingleResponse indicating the success of the operation.
+     * @throws NotFoundException If the user or the mode configuration does not exist.
+     * @throws ForbiddenException If the mode configuration does not belong to the specified user.
+     * @throws InternalServerErrorException If an error occurs during the deletion process.
+     */
+    public SingleResponse deleteModeConfig(String userId, String modeId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Retrieve the mode configuration for the user
+            DocumentReference modeConfigDocRef = firestore.collection("mode_configs").document(modeId);
+            DocumentSnapshot modeConfigDoc = modeConfigDocRef.get().get();
+
+            if (!modeConfigDoc.exists()) {
+                throw new NotFoundException("Mode configuration not found");
+            }
+
+            // Check if the mode configuration belongs to the user
+            String modeUserId = modeConfigDoc.getString("userId");
+            if (!userId.equals(modeUserId)) {
+                throw new ForbiddenException("You do not have permission to access this mode configuration");
+            }
+
+            // Delete the mode configuration document
+            modeConfigDocRef.delete().get();
+
+            return new SingleResponse("Mode configuration deleted successfully");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
+    /**
+     * Activates a mode configuration for a specific user by sending the configuration
+     * details to the associated sensor.
+     *
+     * @param userId The ID of the user for whom the mode configuration is to be activated.
+     * @param modeId The ID of the mode configuration to be activated.
+     * @return A {@link SingleResponse} indicating the success of the operation.
+     * @throws NotFoundException If the user, mode configuration, or sensor is not found.
+     * @throws ForbiddenException If the mode configuration does not belong to the specified user.
+     * @throws InternalServerErrorException If an error occurs during the execution of the operation.
+     */
+    public SingleResponse activateModeConfig(String userId, String modeId) {
+        try {
+            // Get reference to the user document in Firestore
+            DocumentReference docRef = firestore.collection("users").document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Retrieve the mode configuration for the user
+            DocumentReference modeConfigDocRef = firestore.collection("mode_configs").document(modeId);
+            DocumentSnapshot modeConfigDoc = modeConfigDocRef.get().get();
+
+            if (!modeConfigDoc.exists()) {
+                throw new NotFoundException("Mode configuration not found");
+            }
+
+            // Check if the mode configuration belongs to the user
+            String modeUserId = modeConfigDoc.getString("userId");
+            if (!userId.equals(modeUserId)) {
+                throw new ForbiddenException("You do not have permission to access this mode configuration");
+            }
+
+            // Retrieve the mode configuration details
+            long ledMode = safeGetLong(modeConfigDoc, "ledMode", 0);
+            long brightness = safeGetLong(modeConfigDoc, "brightness", 0);
+            long fanMode = safeGetLong(modeConfigDoc, "fanMode", 0);
+
+            String sensorId = snapshot.getString("sensorId");
+            if (sensorId == null) {
+                throw new NotFoundException("Sensor not found");
+            }
+
+            // Send the mode configuration to the sensor
+            sensorDataService.forceControl(sensorId, ledMode, fanMode, brightness);
+
+            return new SingleResponse("Mode configuration activated successfully");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InternalServerErrorException();
@@ -439,6 +777,20 @@ public class UserService {
         String storedUserId = userDoc.getId();
 
         return userId == null || !storedUserId.equals(userId);
+    }
+
+    /**
+     * Safely retrieves a long value from a DocumentSnapshot for the specified field.
+     * If the field is null or does not exist, the provided default value is returned.
+     *
+     * @param doc          The DocumentSnapshot object to retrieve the value from.
+     * @param field        The name of the field to retrieve.
+     * @param defaultValue The default value to return if the field is null or does not exist.
+     * @return The long value of the specified field, or the default value if the field is null or does not exist.
+     */
+    private long safeGetLong(DocumentSnapshot doc, String field, long defaultValue) {
+        Long value = doc.getLong(field);
+        return value != null ? value : defaultValue;
     }
 
 }

@@ -32,14 +32,17 @@ import hcmut.smart_home.exception.ConflictException;
 import hcmut.smart_home.exception.ForbiddenException;
 import hcmut.smart_home.exception.InternalServerErrorException;
 import hcmut.smart_home.exception.NotFoundException;
+import hcmut.smart_home.handler.WebSocketNotificationHandler;
 
 @Service
 public class SensorService {
 
     private final Firestore firestore;
+    private final WebSocketNotificationHandler webSocketNotificationHandler;
 
-    public SensorService(Firestore firestore) {
+    public SensorService(Firestore firestore, WebSocketNotificationHandler webSocketNotificationHandler) {
         this.firestore = firestore;
+        this.webSocketNotificationHandler = webSocketNotificationHandler;
     }
 
     /**
@@ -278,6 +281,10 @@ public class SensorService {
                     "userId", userId,
                     "sensorId", sensorId,
                     "createdAt", Timestamp.now()
+                ));
+                webSocketNotificationHandler.sendNotificationToUser(ownerId, String.format(
+                    "{\"request\": \"User %s has requested to subscribe to your sensor.\", \"userId\": \"%s\", \"sensorId\": \"%s\"}",
+                    userId, userId, sensorId
                 ));
     
                 return new SingleResponse("Request to subscribe sent.");

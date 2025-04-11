@@ -173,11 +173,11 @@ public class SensorDataService {
     
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.error("Interrupted while checking threshold for sensor {}: ", sensorId, e);
+                logger.error("Interrupted while checking threshold for sensor {}: ", sensorId, e.getMessage());
             } catch (ExecutionException e) {
-                logger.error("Error executing Firestore query for sensor {}: ", sensorId, e);
+                logger.error("Error executing Firestore query for sensor {}: ", sensorId, e.getMessage());
             } catch (Exception e) {
-                logger.error("Unexpected error checking threshold for sensor {}: ", sensorId, e);
+                logger.error("Unexpected error checking threshold for sensor {}: ", sensorId, e.getMessage());
             }
         } else {
             logger.info("Sensor {} is in cooldown, skipping check.", sensorId);
@@ -198,7 +198,26 @@ public class SensorDataService {
                 default -> logger.warn("Unsupported type for force control: {}", type);
             }
         } catch (Exception e) {
-            logger.error("Error controlling sensor {}: ", sensorId, e);
+            logger.error("Error controlling sensor {}: ", sensorId, e.getMessage());
+        }
+    }
+
+    /**
+     * Force control for LED, fan, and brightness.
+     * @param sensorId the ID of the sensor
+     * @param ledMode the mode for LED (0-4)
+     * @param fanMode the mode for fan (0-3)
+     * @param brightness the brightness level (10-100)
+     */
+    public void forceControl(String sensorId, long ledMode, long fanMode, long brightness) {
+        DatabaseReference controlRef = firebaseDatabase.getReference("control/" + sensorId);
+        try {
+            controlRef.child("button_for_led").setValueAsync(ledMode);
+            controlRef.child("button_for_fan").setValueAsync(fanMode);
+            controlRef.child("candel_power_for_led").setValueAsync(brightness);
+            logger.info("Forced control for sensor {}: ledMode={}, fanMode={}, brightness={}", sensorId, ledMode, fanMode, brightness);
+        } catch (Exception e) {
+            logger.error("Error controlling sensor {}: ", sensorId, e.getMessage());
         }
     }
 

@@ -5,8 +5,10 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -19,10 +21,13 @@ import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
+import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
+import hcmut.smart_home.dto.user.ModeConfigResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
+import hcmut.smart_home.dto.user.UpdateModeConfigRequest;
 import hcmut.smart_home.dto.user.UpdateUserRequest;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.service.UserService;
@@ -148,7 +153,140 @@ public class UserController {
 
     @GetMapping("/me/notifications")
     @Operation(summary = "Get user notifications", tags = "User Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "User notifications retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = NotificationResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "400", description = "Bad request",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
     public ResponseEntity<List<NotificationResponse>> getUserNotifications(@RequestAttribute("userId") String userId) {
         return ResponseEntity.status(HttpStatus.OK).body(userService.getUserNotifications(userId));
+    }
+
+    @PostMapping("/me/mode-configs")
+    @Operation(summary = "Create a new mode config", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Mode config created successfully",
+                    content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request body",
+                    content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "409", description = "Mode config with the same name already exists",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<SingleResponse> createModeConfig(
+            @RequestAttribute("userId") String userId,
+            @Valid @RequestBody CreateModeConfigRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.createModeConfig(userId, request));
+    }
+
+    @GetMapping("/me/mode-configs")
+    @Operation(summary = "Get all mode configs of the user", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Mode configs retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = ModeConfigResponse[].class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<List<ModeConfigResponse>> getUserModeConfigs(@RequestAttribute("userId") String userId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserModeConfigs(userId));
+    }
+
+    @GetMapping("/me/mode-configs/{modeId}")
+    @Operation(summary = "Get a specific mode config", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Mode config retrieved successfully",
+                    content = @Content(schema = @Schema(implementation = ModeConfigResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "Mode config not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<ModeConfigResponse> getModeConfig(
+            @RequestAttribute("userId") String userId,
+            @PathVariable("modeId") String modeId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getModeConfig(userId, modeId));
+    }
+
+    @PutMapping("/me/mode-configs/{modeId}")
+    @Operation(summary = "Update a mode config", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Mode config updated successfully",
+                    content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request body",
+                    content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "Mode config not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<SingleResponse> updateModeConfig(
+            @RequestAttribute("userId") String userId,
+            @PathVariable("modeId") String modeId,
+            @Valid @RequestBody UpdateModeConfigRequest request) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.updateModeConfig(userId, modeId, request));
+    }
+
+    @DeleteMapping("/me/mode-configs/{modeId}")
+    @Operation(summary = "Delete a mode config", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Mode config deleted successfully",
+                    content = @Content()),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "Mode config not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<SingleResponse> deleteModeConfig(
+            @RequestAttribute("userId") String userId,
+            @PathVariable("modeId") String modeId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.deleteModeConfig(userId, modeId));
+    }
+
+    @PutMapping("/me/mode-configs/{modeId}/activate")
+    @Operation(summary = "Activate a mode config", tags = "Mode Config Management")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Mode config activated successfully",
+                    content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content()),
+            @ApiResponse(responseCode = "403", description = "Forbidden",
+                    content = @Content()),
+            @ApiResponse(responseCode = "404", description = "Mode config not found",
+                    content = @Content()),
+            @ApiResponse(responseCode = "409", description = "Mode config is already activated",
+                    content = @Content()),
+            @ApiResponse(responseCode = "500", description = "Internal server error",
+                    content = @Content())
+    })
+    public ResponseEntity<SingleResponse> activateModeConfig(
+            @RequestAttribute("userId") String userId,
+            @PathVariable("modeId") String modeId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.activateModeConfig(userId, modeId));
     }
 }

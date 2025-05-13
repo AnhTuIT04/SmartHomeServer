@@ -209,12 +209,24 @@ public class SensorController {
         @Parameter(description = "Maximum value of the specified field for filtering.")
         @RequestParam(required = false) Double max,
 
-        @Parameter(description = "Start time for filtering data, in Unix timestamp (seconds). Default is three months ago.")
-        @RequestParam(required = false) Long startTime,
+        @Parameter(description = "Time granularity for filtering. Accepted values: year, month, day, hour, minute.")
+        @RequestParam(required = true)  String granularity,
 
-        @Parameter(description = "End time for filtering data, in Unix timestamp (seconds). Default is the current time.")
-        @RequestParam(required = false) Long endTime
+        @Parameter(description = "Year for filtering. Required if granularity is year, month, day, hour, or minute.")
+        @RequestParam(required = false) Integer year,
+
+        @Parameter(description = "Month for filtering. Required if granularity is month, day, hour, or minute.")
+        @RequestParam(required = false) Integer month,
+
+        @Parameter(description = "Day for filtering. Required if granularity is day, hour, or minute.")
+        @RequestParam(required = false) Integer day,
+
+        @Parameter(description = "Hour for filtering. Required if granularity is hour or minute.")
+        @RequestParam(required = false) Integer hour,
+
+        @Parameter(description = "Minute for filtering. Required if granularity is minute.")
+        @RequestParam(required = false) Integer minute
     ) {
-        return ResponseEntity.ok().body(sensorService.getChartFilters(userId, field, min, max, startTime, endTime));
+        return ResponseEntity.ok().body(sensorService.getChartFilters(userId, field, min, max, granularity, year, month, day, hour, minute));
     }
 }

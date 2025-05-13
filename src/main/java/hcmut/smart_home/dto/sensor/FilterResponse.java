@@ -4,22 +4,20 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(title = "FilterResponse", accessMode = Schema.AccessMode.READ_ONLY)
 public class FilterResponse {
-    private String id;
+    private String label;
     private double data;
-    private long timestamp;
 
-    public FilterResponse(String id, double data, long timestamp) {
-        this.id = id;
+    public FilterResponse(String label, double data) {
+        this.label = label;
         this.data = data;
-        this.timestamp = timestamp;
     }
 
-    public String getId() {
-        return id;
+    public String getLabel() {
+        return label;
     }
 
-    public void setId(String id) {
-        this.id = id;
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     public double getData() {
@@ -29,13 +27,5 @@ public class FilterResponse {
     public void setData(double data) {
         this.data = data;
     }
-
-    public long getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(long timestamp) {
-        this.timestamp = timestamp;
-    }
-
+    
 }

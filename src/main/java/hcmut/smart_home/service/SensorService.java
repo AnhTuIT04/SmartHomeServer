@@ -1,7 +1,13 @@
 package hcmut.smart_home.service;
 
 import java.time.Instant;
+import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,6 +23,7 @@ import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.Query;
+import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
@@ -721,59 +728,137 @@ public class SensorService {
      * @throws ForbiddenException         If the user does not have permission to access the sensor.
      * @throws InternalServerErrorException If an error occurs during query execution.
      */
-    public List<FilterResponse> getChartFilters(String userId, String field, Double min, Double max, Long startTime, Long endTime) {
+    public List<FilterResponse> getChartFilters(String userId, String field, Double min, Double max,
+                                            String granularity, Integer year, Integer month,
+                                            Integer day, Integer hour, Integer minute) {
         try {
             if (field == null || !List.of("humidity", "light_intensity", "temperature").contains(field)) {
                 throw new BadRequestException("Field must be 'humidity', 'light_intensity' or 'temperature'");
             }
 
-            CollectionReference usersCollection = firestore.collection("users");
-            CollectionReference sensorsCollection = firestore.collection("sensors");
-
-            // Check if user exists
-            DocumentSnapshot userSnapshot = usersCollection.document(userId).get().get();
-            if (!userSnapshot.exists()) {
-                throw new NotFoundException("User not found");
+            if (granularity == null || !List.of("year", "month", "day", "hour", "minute").contains(granularity)) {
+                throw new BadRequestException("Invalid granularity");
             }
+
+            DocumentSnapshot userSnapshot = firestore.collection("users").document(userId).get().get();
+            if (!userSnapshot.exists()) throw new NotFoundException("User not found");
 
             String sensorId = userSnapshot.getString("sensorId");
-            if (sensorId == null) {
-                throw new ForbiddenException("User does not have permission to get chart filters");
+            if (sensorId == null) throw new ForbiddenException("No sensor for this user");
+
+            ZonedDateTime from;
+            ZonedDateTime to;
+            ZoneId zoneId = ZoneId.of("UTC");
+
+            switch (granularity) {
+                case "year":
+                    if (year == null) throw new BadRequestException("Year is required for year granularity");
+                    from = ZonedDateTime.of(year, 1, 1, 0, 0, 0, 0, zoneId);
+                    to = from.plusYears(1).minusSeconds(1);
+                    break;
+                case "month":
+                    if (year == null || month == null)
+                        throw new BadRequestException("Year and month are required for month granularity");
+                    from = ZonedDateTime.of(year, month, 1, 0, 0, 0, 0, zoneId);
+                    to = from.plusMonths(1).minusSeconds(1);
+                    break;
+                case "day":
+                    if (year == null || month == null || day == null)
+                        throw new BadRequestException("Year, month, and day are required for day granularity");
+                    from = ZonedDateTime.of(year, month, day, 0, 0, 0, 0, zoneId);
+                    to = from.plusDays(1).minusSeconds(1);
+                    break;
+                case "hour":
+                    if (year == null || month == null || day == null || hour == null)
+                        throw new BadRequestException("Year, month, day and hour are required for hour granularity");
+                    from = ZonedDateTime.of(year, month, day, hour, 0, 0, 0, zoneId);
+                    to = from.plusHours(1).minusSeconds(1);
+                    break;
+                case "minute":
+                    if (year == null || month == null || day == null || hour == null || minute == null)
+                        throw new BadRequestException("Year, month, day, hour and minute are required for minute granularity");
+                    from = ZonedDateTime.of(year, month, day, hour, minute, 0, 0, zoneId);
+                    to = from.plusMinutes(1).minusSeconds(1);
+                    break;
+                default:
+                    throw new BadRequestException("Invalid granularity");
             }
 
-            // Check if sensor exists
-            DocumentSnapshot sensorSnapshot = sensorsCollection.document(sensorId).get().get();
-            if (!sensorSnapshot.exists()) {
-                throw new NotFoundException("Sensor not found");
-            }
+            long startEpoch = from.toEpochSecond();
+            long endEpoch = to.toEpochSecond();
 
-            // Default start time is 3 months ago
-            if (startTime == null) {
-                startTime = Instant.now().minus(90, ChronoUnit.DAYS).getEpochSecond();
-            }
-            // Default end time is now
-            if (endTime == null) {
-                endTime = Instant.now().getEpochSecond();  
-            }
-
-            Query query = firestore.collection("user_sensor").whereEqualTo("sensorId", sensorId);
+            Query query = firestore.collection("user_sensor")
+                .whereEqualTo("sensorId", sensorId)
+                .whereGreaterThanOrEqualTo("timestamp", startEpoch)
+                .whereLessThanOrEqualTo("timestamp", endEpoch);
 
             if (min != null) query = query.whereGreaterThanOrEqualTo(field, min);
             if (max != null) query = query.whereLessThanOrEqualTo(field, max);
 
-            query = query.whereGreaterThanOrEqualTo("timestamp", startTime)
-                        .whereLessThanOrEqualTo("timestamp", endTime)
-                        .orderBy("timestamp"); 
+            query = query.orderBy("timestamp");
+            List<QueryDocumentSnapshot> docs = query.get().get().getDocuments();
 
-            ApiFuture<QuerySnapshot> future = query.get();
+            Map<String, List<Double>> grouped = new HashMap<>();
+            for (QueryDocumentSnapshot doc : docs) {
+                Long timestamp = doc.getLong("timestamp");
+                Double value = doc.getDouble(field);
+                if (timestamp == null || value == null) continue;
 
-            return future.get().getDocuments().stream()
-                .map(doc -> new FilterResponse(
-                    doc.getId(),
-                    Objects.requireNonNullElse(doc.getDouble(field), 0.0),
-                    Objects.requireNonNullElse(doc.getLong("timestamp"), 0L) 
-                ))
-                .collect(Collectors.toList());
+                ZonedDateTime dt = Instant.ofEpochSecond(timestamp).atZone(zoneId);
+                String key;
+
+                switch (granularity) {
+                    case "year":
+                        key = String.valueOf(dt.getMonthValue()); // 1-12
+                        break;
+                    case "month":
+                        key = String.valueOf(dt.getDayOfMonth()); // 1-31
+                        break;
+                    case "day":
+                        key = String.valueOf(dt.getHour()); // 0-23
+                        break;
+                    case "hour":
+                        key = String.valueOf(dt.getMinute()); // 0-59
+                        break;
+                    case "minute":
+                        key = String.valueOf(dt.getSecond()); // 0-59
+                        break;
+                    default:
+                        key = "unknown";
+                }
+
+                grouped.computeIfAbsent(key, _ -> new ArrayList<>()).add(value);
+            }
+
+            List<FilterResponse> result = new ArrayList<>();
+
+            int start = 0;
+            int end = 0;
+            switch (granularity) {
+                case "year":
+                    start = 1; end = 12;
+                    break;
+                case "month":
+                    YearMonth ym = YearMonth.of(year, month);
+                    start = 1; end = ym.lengthOfMonth();
+                    break;
+                case "day":
+                    start = 0; end = 23;
+                    break;
+                case "hour":
+                case "minute":
+                    start = 0; end = 59;
+                    break;
+            }
+
+            for (int i = start; i <= end; i++) {
+                String label = String.valueOf(i);
+                List<Double> values = grouped.getOrDefault(label, new ArrayList<>());
+                double avg = values.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
+                result.add(new FilterResponse(label, avg));
+            }
+
+            return result;
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

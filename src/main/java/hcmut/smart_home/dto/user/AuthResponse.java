@@ -16,6 +16,11 @@ public class AuthResponse extends UserResponse {
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 
+    public AuthResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId, String accessToken, String refreshToken) {
+        super(id, firstName, lastName, email, phone, avatar, sensorId);
+        this.token = new TokenResponse(accessToken, refreshToken);
+    }
+
     public String getAccessToken() {
         return token.getAccessToken();
     }

@@ -42,6 +42,7 @@ To install and run the project locally:
 
 - `JWT_SECRET`: A secure string with a minimum length of 256 bits. It is recommended to generate this using a secure random generator.
 - `ACCESS_TOKEN_EXPIRATION` & `REFRESH_TOKEN_EXPIRATION`: The expiration times for access and refresh tokens, respectively, in milliseconds.
+`THRESHOLD`: The confidence threshold for face recognition. This value determines how strictly the system matches detected faces to known identities. A lower value allows more matches (less strict), while a higher value requires a closer match (more strict). Adjust according to your application's security and usability needs.
 - `CLOUDINARY_URL`: Obtainable from your Cloudinary dashboard under **Account Details**.
 - `FIREBASE_URL`: The database URL from your Firebase project settings under the **Realtime Database** section.
 - `FIREBASE_CREDENTIALS`: This is a Base64 encoded version of your Firebase service account JSON file.
@@ -55,11 +56,13 @@ To download the `service-account.json`:
 
 ### Environment Setup
 
-1. Create a `.env` file in the root directory with the following content:
+1. Create a `.env` file in the root directory (for example, you can use the following template):
    ```properties
    JWT_SECRET=your-jwt-secret
    ACCESS_TOKEN_EXPIRATION=8640000
    REFRESH_TOKEN_EXPIRATION=604800000
+
+   THRESHOLD=0.7
 
    CLOUDINARY_URL=cloudinary://your-cloudinary-url
 

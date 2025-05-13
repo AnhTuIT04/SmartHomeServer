@@ -23,9 +23,9 @@ import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
+import hcmut.smart_home.dto.user.FaceIDRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
 import hcmut.smart_home.dto.user.ModeConfigResponse;
-import hcmut.smart_home.dto.user.CreateFaceIDRequest;
 import hcmut.smart_home.dto.user.TokenRequest;
 import hcmut.smart_home.dto.user.TokenResponse;
 import hcmut.smart_home.dto.user.UpdateModeConfigRequest;
@@ -84,7 +84,7 @@ public class UserController {
     }
 
     @PublicEndpoint
-    @PostMapping("/auth/login/face-id")
+    @PostMapping("/auth/login-face-id")
     @Operation(summary = "Login to user account using face ID", tags = "Authentication")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User logged in successfully",
@@ -96,9 +96,8 @@ public class UserController {
             @ApiResponse(responseCode = "500", description = "Internal server error",
                     content = @Content())
     })
-    public ResponseEntity<AuthResponse> loginWithFaceId(@Valid @RequestBody final LoginUserRequest user) {
-        return ResponseEntity.status(HttpStatus.OK).body(null);
-        // return ResponseEntity.status(HttpStatus.OK).body(userService.loginWithFaceId(user));
+    public ResponseEntity<AuthResponse> loginWithFaceId(@Valid @RequestBody final FaceIDRequest faceId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.loginWithFaceId(faceId));
     }
 
     @PublicEndpoint
@@ -123,6 +122,8 @@ public class UserController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Face ID enrolled successfully",
                     content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+            @ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content()),
             @ApiResponse(responseCode = "400", description = "Invalid request body",
                     content = @Content()),
             @ApiResponse(responseCode = "401", description = "Unauthorized",
@@ -130,11 +131,8 @@ public class UserController {
             @ApiResponse(responseCode = "500", description = "Internal server error",
                     content = @Content())
     })
-    public ResponseEntity<SingleResponse> registerFaceId(@Valid @RequestBody final CreateFaceIDRequest faceId, @RequestAttribute("userId") String userId) {
-        System.out.println(faceId.getEmbedded());
-        System.out.println("Come here");
-        return ResponseEntity.status(HttpStatus.OK).body(new SingleResponse("Face ID registered successfully"));
-        // return ResponseEntity.status(HttpStatus.OK).body(userService.registerFaceId(userId, faceId));
+    public ResponseEntity<SingleResponse> enrollFaceId(@Valid @RequestBody final FaceIDRequest faceId, @RequestAttribute("userId") String userId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.enrollFaceId(userId, faceId));
     }
 
     @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

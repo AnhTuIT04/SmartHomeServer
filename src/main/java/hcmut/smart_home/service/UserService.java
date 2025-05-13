@@ -15,6 +15,7 @@ import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
+import com.google.cloud.firestore.WriteResult;
 
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
@@ -22,6 +23,7 @@ import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
+import hcmut.smart_home.dto.user.FaceIDRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
 import hcmut.smart_home.dto.user.ModeConfigResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
@@ -47,13 +49,15 @@ public class UserService {
     private final CloudinaryUtil cloudinaryUtil;
     private final NotificationService notificationService;
     private final SensorDataService sensorDataService;
+    private final FaceIdService faceIdService;
 
-    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService, SensorDataService sensorDataService) {
+    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService, SensorDataService sensorDataService, FaceIdService faceIdService) {
         this.firestore = firestore;
         this.jwt = jwt;
         this.cloudinaryUtil = cloudinaryUtil;
         this.notificationService = notificationService;
         this.sensorDataService = sensorDataService;
+        this.faceIdService = faceIdService;
     }
 
     /**
@@ -157,8 +161,74 @@ public class UserService {
             throw new InternalServerErrorException();
         }
     }
-
     
+    /**
+     * Authenticates a user using Face ID embedding.
+     * <p>
+     * This method compares the provided face embedding with all stored embeddings in the "face-ids" Firestore collection.
+     * If a match is found within a specified threshold, the corresponding user is authenticated and JWT tokens are generated.
+     * </p>
+     *
+     * @param faceId The {@link FaceIDRequest} containing the user's face embedding to authenticate.
+     * @return {@link AuthResponse} containing user information and authentication tokens if authentication is successful.
+     * @throws UnauthorizedException If no matching face embedding is found or the user does not exist.
+     * @throws InternalServerErrorException If an internal error occurs during authentication.
+     */
+    public AuthResponse loginWithFaceId(FaceIDRequest faceId) {
+        try {
+            List<Double> inputEmbedded = faceId.getEmbedding();
+
+            // Get all face IDs from Firestore
+            ApiFuture<QuerySnapshot> future = firestore.collection("face-ids").get();
+            List<QueryDocumentSnapshot> documents = future.get().getDocuments();
+
+            String matchedUserId = null;
+            double minDistance = Double.MAX_VALUE;
+
+            for (QueryDocumentSnapshot doc : documents) {
+                List<?> embeddingRaw = (List<?>) doc.get("embedding");
+                if (embeddingRaw == null || embeddingRaw.size() != inputEmbedded.size()) continue;
+
+                List<Double> storedEmbedding = embeddingRaw.stream()
+                        .map(o -> o instanceof Number ? ((Number) o).doubleValue() : null)
+                        .toList();
+
+                FaceIDRequest storedFace = new FaceIDRequest();
+                storedFace.setEmbedding(storedEmbedding);
+
+                double distance = faceIdService.computeEuclideanDistance(faceId, storedFace);
+                if (distance < faceIdService.getThreshold() && distance < minDistance) {
+                    minDistance = distance;
+                    matchedUserId = doc.getId(); // Document ID is userId
+                }
+            }
+
+            if (matchedUserId == null) {
+                throw new UnauthorizedException("Face ID verification failed");
+            }
+
+            // Check if the user exists in the "users" collection
+            DocumentSnapshot userDoc = firestore.collection("users").document(matchedUserId).get().get();
+            if (!userDoc.exists()) {
+                throw new UnauthorizedException("Face ID verification failed");
+            }
+
+            // Generate authentication tokens
+            String accessToken = jwt.generateAccessToken(matchedUserId);
+            String refreshToken = jwt.generateRefreshToken(matchedUserId);
+
+            // Return the user response
+            return new AuthResponse(matchedUserId, userDoc.getString("firstName"), userDoc.getString("lastName"),
+                    userDoc.getString("email"), userDoc.getString("phone"), userDoc.getString("avatar"),
+                    userDoc.getString("sensorId"), accessToken, refreshToken);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        }
+    }
+
     /**
      * Refreshes the access token using the provided refresh token.
      *
@@ -183,6 +253,52 @@ public class UserService {
             return new TokenResponse(jwt.generateAccessToken(userId), jwt.generateAccessToken(userId));
         } catch (Exception e) {
             throw new UnauthorizedException("Failed to refresh token");
+        }
+    }
+
+    /**
+     * Enrolls a Face ID for a user by saving the provided Face ID data to the Firestore database.
+     * <p>
+     * This method first checks if the user with the given {@code userId} exists in the "users" collection.
+     * If the user exists, it saves the {@link FaceIDRequest} data to the "face-ids" collection,
+     * using the {@code userId} as the document ID. If the user does not exist, a {@link NotFoundException} is thrown.
+     * </p>
+     *
+     * @param userId the unique identifier of the user to enroll the Face ID for
+     * @param faceId the Face ID data to be enrolled, encapsulated in a {@link FaceIDRequest} object
+     * @return a {@link SingleResponse} indicating the result of the enrollment operation
+     * @throws NotFoundException if the user with the specified {@code userId} does not exist
+     * @throws InternalServerErrorException if an error occurs while accessing Firestore or during the enrollment process
+     */
+    public SingleResponse enrollFaceId(String userId, FaceIDRequest faceId) {
+        try {
+            // Get reference to the user document in Firestore
+            CollectionReference usersCollection = firestore.collection("users");
+            DocumentReference docRef = usersCollection.document(userId);
+
+            // Check if the user exists
+            var snapshot = docRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
+            // Save faceId to 'face-ids' collection with document ID = userId
+            CollectionReference faceIdCollection = firestore.collection("face-ids");
+            DocumentReference faceIdDocRef = faceIdCollection.document(userId);
+
+            // Convert CreateFaceIDRequest to Map or use Firestore-supported object
+            ApiFuture<WriteResult> writeResult = faceIdDocRef.set(faceId); // set() will overwrite if exists
+
+            // Wait for the write to complete
+            writeResult.get();
+
+            return new SingleResponse("Face ID enrolled successfully");
+            
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
         }
     }
 

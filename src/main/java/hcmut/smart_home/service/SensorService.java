@@ -711,19 +711,27 @@ public class SensorService {
     }
 
     /**
-     * Retrieves a list of chart filters based on the specified parameters.
+     * Retrieves aggregated sensor data for charting purposes, filtered by user, field, value range, and time granularity.
      *
-     * @param userId    The ID of the user requesting the chart filters.
-     * @param field     The field to filter by. Must be one of "humidity", "light_intensity", or "temperature".
-     * @param min       The minimum value for the specified field (optional).
-     * @param max       The maximum value for the specified field (optional).
-     * @param startTime The start time for the filter in epoch seconds (optional, defaults to 3 months ago if null).
-     * @param endTime   The end time for the filter in epoch seconds (optional, defaults to the current time if null).
-     * @return A list of {@link FilterResponse} objects containing the filtered data.
-     * @throws BadRequestException        If the field is null or not one of the allowed values.
-     * @throws NotFoundException          If the user or sensor is not found.
-     * @throws ForbiddenException         If the user does not have permission to access the sensor.
-     * @throws InternalServerErrorException If an error occurs during query execution.
+     * <p>This method fetches sensor readings for a specific user and sensor, within a specified time range and granularity
+     * (year, month, day, hour, or minute). It groups the data according to the granularity and computes the average value
+     * for each group. Optionally, it filters the data by minimum and/or maximum values for the specified field.</p>
+     *
+     * @param userId       The ID of the user whose sensor data is to be retrieved.
+     * @param field        The sensor field to aggregate ("humidity", "light_intensity", or "temperature").
+     * @param min          Optional minimum value filter for the field.
+     * @param max          Optional maximum value filter for the field.
+     * @param granularity  The time granularity for grouping ("year", "month", "day", "hour", or "minute").
+     * @param year         The year component for the time range (required for all granularities).
+     * @param month        The month component (required for "month", "day", "hour", "minute" granularities).
+     * @param day          The day component (required for "day", "hour", "minute" granularities).
+     * @param hour         The hour component (required for "hour", "minute" granularities).
+     * @param minute       The minute component (required for "minute" granularity).
+     * @return             A list of {@link FilterResponse} objects, each containing a label (time group) and the average value.
+     * @throws BadRequestException         If required parameters are missing or invalid.
+     * @throws NotFoundException           If the user is not found.
+     * @throws ForbiddenException          If the user does not have an associated sensor.
+     * @throws InternalServerErrorException If an internal error occurs during data retrieval.
      */
     public List<FilterResponse> getChartFilters(String userId, String field, Double min, Double max,
                                             String granularity, Integer year, Integer month,
@@ -748,37 +756,36 @@ public class SensorService {
             ZoneId zoneId = ZoneId.of("UTC");
 
             switch (granularity) {
-                case "year":
+                case "year" -> {
                     if (year == null) throw new BadRequestException("Year is required for year granularity");
                     from = ZonedDateTime.of(year, 1, 1, 0, 0, 0, 0, zoneId);
                     to = from.plusYears(1).minusSeconds(1);
-                    break;
-                case "month":
+                }
+                case "month" -> {
                     if (year == null || month == null)
                         throw new BadRequestException("Year and month are required for month granularity");
                     from = ZonedDateTime.of(year, month, 1, 0, 0, 0, 0, zoneId);
                     to = from.plusMonths(1).minusSeconds(1);
-                    break;
-                case "day":
+                }
+                case "day" -> {
                     if (year == null || month == null || day == null)
                         throw new BadRequestException("Year, month, and day are required for day granularity");
                     from = ZonedDateTime.of(year, month, day, 0, 0, 0, 0, zoneId);
                     to = from.plusDays(1).minusSeconds(1);
-                    break;
-                case "hour":
+                }
+                case "hour" -> {
                     if (year == null || month == null || day == null || hour == null)
                         throw new BadRequestException("Year, month, day and hour are required for hour granularity");
                     from = ZonedDateTime.of(year, month, day, hour, 0, 0, 0, zoneId);
                     to = from.plusHours(1).minusSeconds(1);
-                    break;
-                case "minute":
+                }
+                case "minute" -> {
                     if (year == null || month == null || day == null || hour == null || minute == null)
                         throw new BadRequestException("Year, month, day, hour and minute are required for minute granularity");
                     from = ZonedDateTime.of(year, month, day, hour, minute, 0, 0, zoneId);
                     to = from.plusMinutes(1).minusSeconds(1);
-                    break;
-                default:
-                    throw new BadRequestException("Invalid granularity");
+                }
+                default -> throw new BadRequestException("Invalid granularity");
             }
 
             long startEpoch = from.toEpochSecond();
@@ -804,49 +811,34 @@ public class SensorService {
                 ZonedDateTime dt = Instant.ofEpochSecond(timestamp).atZone(zoneId);
                 String key;
 
-                switch (granularity) {
-                    case "year":
-                        key = String.valueOf(dt.getMonthValue()); // 1-12
-                        break;
-                    case "month":
-                        key = String.valueOf(dt.getDayOfMonth()); // 1-31
-                        break;
-                    case "day":
-                        key = String.valueOf(dt.getHour()); // 0-23
-                        break;
-                    case "hour":
-                        key = String.valueOf(dt.getMinute()); // 0-59
-                        break;
-                    case "minute":
-                        key = String.valueOf(dt.getSecond()); // 0-59
-                        break;
-                    default:
-                        key = "unknown";
-                }
+                key = switch (granularity) {
+                    case "year" -> String.valueOf(dt.getMonthValue()); // 1-12
+                    case "month" -> String.valueOf(dt.getDayOfMonth()); // 1-31
+                    case "day" -> String.valueOf(dt.getHour()); // 0-23
+                    case "hour" -> String.valueOf(dt.getMinute()); // 0-59
+                    case "minute" -> String.valueOf(dt.getSecond()); // 0-59
+                    default -> "unknown";
+                };
 
                 grouped.computeIfAbsent(key, _ -> new ArrayList<>()).add(value);
             }
 
             List<FilterResponse> result = new ArrayList<>();
 
-            int start = 0;
-            int end = 0;
-            switch (granularity) {
-                case "year":
-                    start = 1; end = 12;
-                    break;
-                case "month":
+            int start;
+            int end;
+            int[] range = switch (granularity) {
+                case "year" -> new int[]{1, 12};
+                case "month" -> {
                     YearMonth ym = YearMonth.of(year, month);
-                    start = 1; end = ym.lengthOfMonth();
-                    break;
-                case "day":
-                    start = 0; end = 23;
-                    break;
-                case "hour":
-                case "minute":
-                    start = 0; end = 59;
-                    break;
-            }
+                    yield new int[]{1, ym.lengthOfMonth()};
+                }
+                case "day" -> new int[]{0, 23};
+                case "hour", "minute" -> new int[]{0, 59};
+                default -> throw new BadRequestException("Invalid granularity");
+            };
+            start = range[0];
+            end = range[1];
 
             for (int i = start; i <= end; i++) {
                 String label = String.valueOf(i);

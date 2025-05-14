@@ -183,7 +183,7 @@ public class UserService {
             List<QueryDocumentSnapshot> documents = future.get().getDocuments();
 
             String matchedUserId = null;
-            double minDistance = Double.MAX_VALUE;
+            double minDistance = 512;
 
             for (QueryDocumentSnapshot doc : documents) {
                 List<?> embeddingRaw = (List<?>) doc.get("embedding");
@@ -197,6 +197,7 @@ public class UserService {
                 storedFace.setEmbedding(storedEmbedding);
 
                 double distance = faceIdService.computeEuclideanDistance(faceId, storedFace);
+                System.out.println("Distance: " + String.format("%.4f", distance));
                 if (distance < faceIdService.getThreshold() && distance < minDistance) {
                     minDistance = distance;
                     matchedUserId = doc.getId(); // Document ID is userId
@@ -204,7 +205,7 @@ public class UserService {
             }
 
             if (matchedUserId == null) {
-                throw new UnauthorizedException("Face ID verification failed");
+                throw new UnauthorizedException("Face ID verification failed with min distance: " + String.format("%.4f", minDistance));
             }
 
             // Check if the user exists in the "users" collection

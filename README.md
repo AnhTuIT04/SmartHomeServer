@@ -62,7 +62,7 @@ To download the `service-account.json`:
    ACCESS_TOKEN_EXPIRATION=8640000
    REFRESH_TOKEN_EXPIRATION=604800000
 
-   THRESHOLD=0.6
+   THRESHOLD=0.7
 
    CLOUDINARY_URL=cloudinary://your-cloudinary-url
 

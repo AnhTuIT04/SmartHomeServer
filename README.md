@@ -53,7 +53,6 @@ To download the `service-account.json`:
 3. In the **Service Accounts** tab, click **Generate New Private Key**.
 4. Save the downloaded `service-account.json` file.
 
-
 ### Environment Setup
 
 1. Create a `.env` file in the root directory (for example, you can use the following template):

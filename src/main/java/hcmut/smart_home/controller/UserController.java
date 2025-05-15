@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import hcmut.smart_home.config.PublicEndpoint;
 import hcmut.smart_home.dto.SingleResponse;
@@ -23,7 +25,6 @@ import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
-import hcmut.smart_home.dto.user.FaceIDRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
 import hcmut.smart_home.dto.user.ModeConfigResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
@@ -84,7 +85,7 @@ public class UserController {
     }
 
     @PublicEndpoint
-    @PostMapping("/auth/login-face-id")
+    @PostMapping(value = "/auth/login-face-id", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Login to user account using face ID", tags = "Authentication")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User logged in successfully",
@@ -96,8 +97,8 @@ public class UserController {
             @ApiResponse(responseCode = "500", description = "Internal server error",
                     content = @Content())
     })
-    public ResponseEntity<AuthResponse> loginWithFaceId(@Valid @RequestBody final FaceIDRequest faceId) {
-        return ResponseEntity.status(HttpStatus.OK).body(userService.loginWithFaceId(faceId));
+    public ResponseEntity<AuthResponse> loginWithFaceId(@RequestParam("image") MultipartFile image) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.loginWithFaceId(image));
     }
 
     @PublicEndpoint
@@ -117,7 +118,7 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.OK).body(userService.refresh(token));
     }
 
-    @PostMapping("/me/face-id")
+    @PostMapping(value = "/me/face-id", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Enroll face ID for user", tags = "User Management")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Face ID enrolled successfully",
@@ -131,8 +132,8 @@ public class UserController {
             @ApiResponse(responseCode = "500", description = "Internal server error",
                     content = @Content())
     })
-    public ResponseEntity<SingleResponse> enrollFaceId(@Valid @RequestBody final FaceIDRequest faceId, @RequestAttribute("userId") String userId) {
-        return ResponseEntity.status(HttpStatus.OK).body(userService.enrollFaceId(userId, faceId));
+    public ResponseEntity<SingleResponse> enrollFaceId(@RequestParam("image") MultipartFile imageFile, @RequestAttribute("userId") String userId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.enrollFaceId(userId, imageFile));
     }
 
     @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

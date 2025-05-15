@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.google.api.core.ApiFuture;
 import com.google.cloud.firestore.CollectionReference;
@@ -17,13 +18,13 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 import com.google.cloud.firestore.WriteResult;
 
+import hcmut.smart_home.dto.FaceEmbedding.FaceEmbedding;
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
 import hcmut.smart_home.dto.user.ChangePasswordRequest;
 import hcmut.smart_home.dto.user.CreateModeConfigRequest;
 import hcmut.smart_home.dto.user.CreateUserRequest;
-import hcmut.smart_home.dto.user.FaceIDRequest;
 import hcmut.smart_home.dto.user.LoginUserRequest;
 import hcmut.smart_home.dto.user.ModeConfigResponse;
 import hcmut.smart_home.dto.user.TokenRequest;
@@ -49,15 +50,15 @@ public class UserService {
     private final CloudinaryUtil cloudinaryUtil;
     private final NotificationService notificationService;
     private final SensorDataService sensorDataService;
-    private final FaceIdService faceIdService;
+    private final FaceEmbeddingService faceEmbeddingService;
 
-    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService, SensorDataService sensorDataService, FaceIdService faceIdService) {
+    public UserService(Firestore firestore, Jwt jwt, CloudinaryUtil cloudinaryUtil, NotificationService notificationService, SensorDataService sensorDataService, FaceEmbeddingService faceEmbeddingService) {
         this.firestore = firestore;
         this.jwt = jwt;
         this.cloudinaryUtil = cloudinaryUtil;
         this.notificationService = notificationService;
         this.sensorDataService = sensorDataService;
-        this.faceIdService = faceIdService;
+        this.faceEmbeddingService = faceEmbeddingService;
     }
 
     /**
@@ -169,13 +170,15 @@ public class UserService {
      * If a match is found within a specified threshold, the corresponding user is authenticated and JWT tokens are generated.
      * </p>
      *
-     * @param faceId The {@link FaceIDRequest} containing the user's face embedding to authenticate.
+     * @param faceId The {@link FaceEmbedding} containing the user's face embedding to authenticate.
      * @return {@link AuthResponse} containing user information and authentication tokens if authentication is successful.
      * @throws UnauthorizedException If no matching face embedding is found or the user does not exist.
      * @throws InternalServerErrorException If an internal error occurs during authentication.
      */
-    public AuthResponse loginWithFaceId(FaceIDRequest faceId) {
+    public AuthResponse loginWithFaceId(MultipartFile image) {
         try {
+            // Get the face embedding from the provided image
+            FaceEmbedding faceId = faceEmbeddingService.getEmbedding(image);
             List<Double> inputEmbedded = faceId.getEmbedding();
 
             // Get all face IDs from Firestore
@@ -183,7 +186,7 @@ public class UserService {
             List<QueryDocumentSnapshot> documents = future.get().getDocuments();
 
             String matchedUserId = null;
-            double minDistance = Double.MAX_VALUE;
+            double maxSimilarity = 0.0;
 
             for (QueryDocumentSnapshot doc : documents) {
                 List<?> embeddingRaw = (List<?>) doc.get("embedding");
@@ -193,24 +196,24 @@ public class UserService {
                         .map(o -> o instanceof Number ? ((Number) o).doubleValue() : null)
                         .toList();
 
-                FaceIDRequest storedFace = new FaceIDRequest();
+                FaceEmbedding storedFace = new FaceEmbedding();
                 storedFace.setEmbedding(storedEmbedding);
 
-                double distance = faceIdService.computeEuclideanDistance(faceId, storedFace);
-                if (distance < faceIdService.getThreshold() && distance < minDistance) {
-                    minDistance = distance;
-                    matchedUserId = doc.getId(); // Document ID is userId
+                double similarity = faceEmbeddingService.calculateSimilarity(inputEmbedded, storedFace.getEmbedding());
+                if (similarity > maxSimilarity && similarity >= faceEmbeddingService.getThreshold()) {
+                    maxSimilarity = similarity;
+                    matchedUserId = doc.getId();
                 }
             }
 
             if (matchedUserId == null) {
-                throw new UnauthorizedException("Face ID verification failed");
+                throw new UnauthorizedException("Face ID verification failed" + String.format(" maxSimilarity: %.2f", maxSimilarity));
             }
 
             // Check if the user exists in the "users" collection
             DocumentSnapshot userDoc = firestore.collection("users").document(matchedUserId).get().get();
             if (!userDoc.exists()) {
-                throw new UnauthorizedException("Face ID verification failed");
+                throw new UnauthorizedException("Face ID verification failed" + String.format(" maxSimilarity: %.2f", maxSimilarity));
             }
 
             // Generate authentication tokens
@@ -255,22 +258,18 @@ public class UserService {
             throw new UnauthorizedException("Failed to refresh token");
         }
     }
-
+    
     /**
-     * Enrolls a Face ID for a user by saving the provided Face ID data to the Firestore database.
-     * <p>
-     * This method first checks if the user with the given {@code userId} exists in the "users" collection.
-     * If the user exists, it saves the {@link FaceIDRequest} data to the "face-ids" collection,
-     * using the {@code userId} as the document ID. If the user does not exist, a {@link NotFoundException} is thrown.
-     * </p>
+     * Enrolls a face ID for a user by extracting a face embedding from the provided image file
+     * and storing it in the Firestore database under the 'face-ids' collection with the user's ID.
      *
-     * @param userId the unique identifier of the user to enroll the Face ID for
-     * @param faceId the Face ID data to be enrolled, encapsulated in a {@link FaceIDRequest} object
-     * @return a {@link SingleResponse} indicating the result of the enrollment operation
-     * @throws NotFoundException if the user with the specified {@code userId} does not exist
-     * @throws InternalServerErrorException if an error occurs while accessing Firestore or during the enrollment process
+     * @param userId     The unique identifier of the user to enroll the face ID for.
+     * @param imageFile  The image file containing the user's face to be processed.
+     * @return           A {@link SingleResponse} indicating the result of the enrollment operation.
+     * @throws NotFoundException           If the user with the specified ID does not exist.
+     * @throws InternalServerErrorException If an error occurs during Firestore operations or face embedding extraction.
      */
-    public SingleResponse enrollFaceId(String userId, FaceIDRequest faceId) {
+    public SingleResponse enrollFaceId(String userId, MultipartFile imageFile) {
         try {
             // Get reference to the user document in Firestore
             CollectionReference usersCollection = firestore.collection("users");
@@ -286,8 +285,11 @@ public class UserService {
             CollectionReference faceIdCollection = firestore.collection("face-ids");
             DocumentReference faceIdDocRef = faceIdCollection.document(userId);
 
+            // Extract face embedding from the image file
+            FaceEmbedding faceId = faceEmbeddingService.getEmbedding(imageFile);
+
             // Convert CreateFaceIDRequest to Map or use Firestore-supported object
-            ApiFuture<WriteResult> writeResult = faceIdDocRef.set(faceId); // set() will overwrite if exists
+            ApiFuture<WriteResult> writeResult = faceIdDocRef.set(faceId);
 
             // Wait for the write to complete
             writeResult.get();

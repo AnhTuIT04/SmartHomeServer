@@ -66,7 +66,7 @@ To download the `service-account.json`:
    FIREBASE_URL=https://your-firebase-url
    FIREBASE_CREDENTIALS=your-base64-encoded-service-account
 
-   THRESHOLD=0.7
+   FACE_EMBEDDING_THRESHOLD=0.7
    ```
 
 2. To get `FIREBASE_CREDENTIALS`, encode your Firebase service account file (`service-account.json`) as Base64:

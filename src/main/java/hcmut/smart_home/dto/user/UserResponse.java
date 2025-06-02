@@ -11,10 +11,11 @@ public class UserResponse {
     private String phone;
     private String avatar;
     private String sensorId;
+    private boolean isEnrolledFaceId;
 
     public UserResponse() {}
 
-    public UserResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId) {
+    public UserResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId, boolean isEnrolledFaceId) {
         this.id = id;
         this.firstName = firstName;
         this.lastName = lastName;
@@ -22,6 +23,7 @@ public class UserResponse {
         this.phone = phone;
         this.avatar = avatar;
         this.sensorId = sensorId;
+        this.isEnrolledFaceId = isEnrolledFaceId;
     }
 
     public String getFirstName() {
@@ -78,5 +80,13 @@ public class UserResponse {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public boolean isEnrolledFaceId() {
+        return isEnrolledFaceId;
+    }
+
+    public void setEnrolledFaceId(boolean enrolledFaceId) {
+        isEnrolledFaceId = enrolledFaceId;
     }
 }

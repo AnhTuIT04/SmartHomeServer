@@ -520,15 +520,19 @@ public class SensorService {
 
             // Map query results to response DTO
             return userQuerySnapshot.getDocuments().stream()
-                .map(doc -> new UserResponse(
-                    doc.getId(),
-                    doc.getString("firstName"),
-                    doc.getString("lastName"),
-                    doc.getString("email"),
-                    doc.getString("phone"),
-                    doc.getString("avatar"),
-                    doc.getString("sensorId")
-                ))
+                .map(doc -> {
+                    // Extract user details
+                    String firstName = doc.getString("firstName");
+                    String lastName = doc.getString("lastName");
+                    String email = doc.getString("email");
+                    String phone = doc.getString("phone");
+                    String avatar = doc.getString("avatar");
+                    String userSensorId = doc.getString("sensorId");
+                    Boolean isEnrolledFaceIdObj = doc.getBoolean("isEnrolledFaceId");
+                    boolean isEnrolledFaceId = isEnrolledFaceIdObj != null && isEnrolledFaceIdObj;
+
+                    return new UserResponse( doc.getId(), firstName, lastName, email, phone, avatar, userSensorId, isEnrolledFaceId);
+                })
                 .collect(Collectors.toList());
 
         } catch (InterruptedException e) {

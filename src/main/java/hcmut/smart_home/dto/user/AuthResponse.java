@@ -7,17 +7,17 @@ public class AuthResponse extends UserResponse {
     private final TokenResponse token;
 
     public AuthResponse(CreateUserRequest user, String id, String accessToken, String refreshToken) {
-        super(id, user.getFirstName(), user.getLastName(), user.getEmail(), user.getPhone(), user.getAvatar(), user.getSensorId());
+        super(id, user.getFirstName(), user.getLastName(), user.getEmail(), user.getPhone(), user.getAvatar(), user.getSensorId(), false);
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 
-    public AuthResponse(LoginUserRequest user, String id, String firstName, String lastName, String phone, String avatar, String sensorId, String accessToken, String refreshToken) {
-        super(id, firstName, lastName, user.getEmail(), phone, avatar, sensorId);
+    public AuthResponse(LoginUserRequest user, String id, String firstName, String lastName, String phone, String avatar, String sensorId, boolean isEnrolledFaceId, String accessToken, String refreshToken) {
+        super(id, firstName, lastName, user.getEmail(), phone, avatar, sensorId, isEnrolledFaceId);
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 
-    public AuthResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId, String accessToken, String refreshToken) {
-        super(id, firstName, lastName, email, phone, avatar, sensorId);
+    public AuthResponse(String id, String firstName, String lastName, String email, String phone, String avatar, String sensorId, boolean isEnrolledFaceId, String accessToken, String refreshToken) {
+        super(id, firstName, lastName, email, phone, avatar, sensorId, isEnrolledFaceId);
         this.token = new TokenResponse(accessToken, refreshToken);
     }
 

@@ -16,7 +16,6 @@ import com.google.cloud.firestore.Query;
 import com.google.cloud.firestore.QueryDocumentSnapshot;
 import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
-import com.google.cloud.firestore.WriteResult;
 
 import hcmut.smart_home.dto.FaceEmbedding.FaceEmbedding;
 import hcmut.smart_home.dto.SingleResponse;
@@ -147,13 +146,15 @@ public class UserService {
             String phone = userDoc.getString("phone");
             String avatar = userDoc.getString("avatar");
             String sensorId = userDoc.getString("sensorId");
+            Boolean enrolledFaceIdObj = userDoc.getBoolean("isEnrolledFaceId");
+            boolean isEnrolledFaceId = enrolledFaceIdObj != null && enrolledFaceIdObj;
 
             // Generate authentication tokens
             String accessToken = jwt.generateAccessToken(userId);
             String refreshToken = jwt.generateRefreshToken(userId);
 
             // Return the user response
-            return new AuthResponse(user, userId, firstName, lastName, phone, avatar, sensorId, accessToken, refreshToken);
+            return new AuthResponse(user, userId, firstName, lastName, phone, avatar, sensorId, isEnrolledFaceId, accessToken, refreshToken);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -220,10 +221,18 @@ public class UserService {
             String accessToken = jwt.generateAccessToken(matchedUserId);
             String refreshToken = jwt.generateRefreshToken(matchedUserId);
 
+            // Extract user details
+            String firstName = userDoc.getString("firstName");
+            String lastName = userDoc.getString("lastName");
+            String email = userDoc.getString("email");
+            String phone = userDoc.getString("phone");
+            String avatar = userDoc.getString("avatar");
+            String sensorId = userDoc.getString("sensorId");
+            Boolean isEnrolledFaceIdObj = userDoc.getBoolean("isEnrolledFaceId");
+            boolean isEnrolledFaceId = isEnrolledFaceIdObj != null && isEnrolledFaceIdObj;
+
             // Return the user response
-            return new AuthResponse(matchedUserId, userDoc.getString("firstName"), userDoc.getString("lastName"),
-                    userDoc.getString("email"), userDoc.getString("phone"), userDoc.getString("avatar"),
-                    userDoc.getString("sensorId"), accessToken, refreshToken);
+            return new AuthResponse(matchedUserId, firstName, lastName, email, phone, avatar, sensorId, isEnrolledFaceId, accessToken, refreshToken);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InternalServerErrorException();
@@ -288,14 +297,16 @@ public class UserService {
             // Extract face embedding from the image file
             FaceEmbedding faceId = faceEmbeddingService.getEmbedding(imageFile);
 
-            // Convert CreateFaceIDRequest to Map or use Firestore-supported object
-            ApiFuture<WriteResult> writeResult = faceIdDocRef.set(faceId);
+            // Use batch to write face embedding and update user enrollment status atomically
+            WriteBatch batch = firestore.batch();
+            batch.set(faceIdDocRef, faceId);
+            batch.update(docRef, "isEnrolledFaceId", true);
 
-            // Wait for the write to complete
-            writeResult.get();
+            // Commit the batch operation
+            batch.commit().get();
 
             return new SingleResponse("Face ID enrolled successfully");
-            
+
         } catch (ExecutionException e) {
             throw new InternalServerErrorException();
         } catch (InterruptedException e) {
@@ -304,8 +315,32 @@ public class UserService {
         }
     }
 
+    /**
+     * Deletes the Face ID associated with the specified user.
+     * <p>
+     * This method performs the following steps:
+     * <ul>
+     *   <li>Checks if the user with the given {@code userId} exists in the Firestore database.</li>
+     *   <li>Checks if a Face ID document exists for the user.</li>
+     *   <li>If both exist, deletes the Face ID document and updates the user's {@code isEnrolledFaceId} status to {@code false} in a batch operation.</li>
+     * </ul>
+     * If the user or Face ID does not exist, a {@link NotFoundException} is thrown.
+     * If an internal error occurs during the operation, an {@link InternalServerErrorException} is thrown.
+     *
+     * @param userId the unique identifier of the user whose Face ID is to be deleted
+     * @return a {@link SingleResponse} indicating the result of the operation
+     * @throws NotFoundException if the user or Face ID does not exist
+     * @throws InternalServerErrorException if an error occurs during the deletion process
+     */
     public SingleResponse deleteFaceId(String userId) {
         try {
+            // Check if the user exists
+            DocumentReference userDocRef = firestore.collection("users").document(userId);
+            var userSnapshot = userDocRef.get().get();
+            if (!userSnapshot.exists()) {
+                throw new NotFoundException("User not found");
+            }
+
             // Get reference to the face ID document in Firestore
             DocumentReference faceIdDocRef = firestore.collection("face-ids").document(userId);
 
@@ -315,11 +350,11 @@ public class UserService {
                 throw new NotFoundException("Face ID not found");
             }
 
-            // Delete the face ID document
-            ApiFuture<WriteResult> writeResult = faceIdDocRef.delete();
-
-            // Wait for the delete operation to complete
-            writeResult.get();
+            // Use batch to delete face ID and update isEnrolledFaceId status
+            WriteBatch batch = firestore.batch();
+            batch.delete(faceIdDocRef);
+            batch.update(userDocRef, "isEnrolledFaceId", false);
+            batch.commit().get();
 
             return new SingleResponse("Face ID deleted successfully");
         } catch (ExecutionException e) {
@@ -447,8 +482,10 @@ public class UserService {
             String phone = snapshot.getString("phone");
             String avatar = snapshot.getString("avatar");
             String sensorId = snapshot.getString("sensorId");
+            Boolean isEnrolledFaceIdObj = snapshot.getBoolean("isEnrolledFaceId");
+            boolean isEnrolledFaceId = isEnrolledFaceIdObj != null && isEnrolledFaceIdObj;
 
-            return new UserResponse(docRef.getId(), firstName, lastName, email, phone, avatar, sensorId);
+            return new UserResponse(docRef.getId(), firstName, lastName, email, phone, avatar, sensorId, isEnrolledFaceId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InternalServerErrorException();

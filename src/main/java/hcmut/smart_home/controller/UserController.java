@@ -121,19 +121,35 @@ public class UserController {
     @PostMapping(value = "/me/face-id", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Enroll face ID for user", tags = "User Management")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Face ID enrolled successfully",
-                    content = @Content(schema = @Schema(implementation = SingleResponse.class))),
-            @ApiResponse(responseCode = "404", description = "User not found",
-                    content = @Content()),
-            @ApiResponse(responseCode = "400", description = "Invalid request body",
-                    content = @Content()),
-            @ApiResponse(responseCode = "401", description = "Unauthorized",
-                    content = @Content()),
-            @ApiResponse(responseCode = "500", description = "Internal server error",
-                    content = @Content())
+        @ApiResponse(responseCode = "200", description = "Face ID enrolled successfully",
+                content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+        @ApiResponse(responseCode = "404", description = "User not found",
+                content = @Content()),
+        @ApiResponse(responseCode = "400", description = "Invalid request body",
+                content = @Content()),
+        @ApiResponse(responseCode = "401", description = "Unauthorized",
+                content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content())
     })
     public ResponseEntity<SingleResponse> enrollFaceId(@RequestParam("image") MultipartFile imageFile, @RequestAttribute("userId") String userId) {
         return ResponseEntity.status(HttpStatus.OK).body(userService.enrollFaceId(userId, imageFile));
+    }
+
+    @DeleteMapping("/me/face-id")
+    @Operation(summary = "Delete face ID for user", tags = "User Management")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Face ID deleted successfully",
+                content = @Content(schema = @Schema(implementation = SingleResponse.class))),
+        @ApiResponse(responseCode = "401", description = "Unauthorized",
+                content = @Content()),
+        @ApiResponse(responseCode = "404", description = "User not found",
+                content = @Content()),
+        @ApiResponse(responseCode = "500", description = "Internal server error",
+                content = @Content())
+    })
+    public ResponseEntity<SingleResponse> deleteFaceId(@RequestAttribute("userId") String userId) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.deleteFaceId(userId));
     }
 
     @PutMapping(value = "/me", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

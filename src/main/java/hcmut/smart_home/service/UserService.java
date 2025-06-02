@@ -304,6 +304,32 @@ public class UserService {
         }
     }
 
+    public SingleResponse deleteFaceId(String userId) {
+        try {
+            // Get reference to the face ID document in Firestore
+            DocumentReference faceIdDocRef = firestore.collection("face-ids").document(userId);
+
+            // Check if the face ID exists
+            var snapshot = faceIdDocRef.get().get();
+            if (!snapshot.exists()) {
+                throw new NotFoundException("Face ID not found");
+            }
+
+            // Delete the face ID document
+            ApiFuture<WriteResult> writeResult = faceIdDocRef.delete();
+
+            // Wait for the delete operation to complete
+            writeResult.get();
+
+            return new SingleResponse("Face ID deleted successfully");
+        } catch (ExecutionException e) {
+            throw new InternalServerErrorException();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InternalServerErrorException();
+        }
+    }
+
     /**
      * Updates the user information in Firestore based on the provided userId and UpdateUserRequest.
      *

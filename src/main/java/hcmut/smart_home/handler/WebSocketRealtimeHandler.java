@@ -82,7 +82,6 @@ public class WebSocketRealtimeHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             String payload = message.getPayload();
-            logger.info("_____________________________", payload);
             JSONObject jsonMessage = new JSONObject(payload);
             String ledMode = jsonMessage.optString("led_mode");
             String brightness = jsonMessage.optString("led_brightness");

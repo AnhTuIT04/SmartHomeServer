@@ -31,7 +31,7 @@ import hcmut.smart_home.handler.WebSocketNotificationHandler;
 public class SensorDataService {
 
     private static final Logger logger = LoggerFactory.getLogger(SensorDataService.class);
-    private static final long COOLDOWN_SECONDS = 0;
+    private static final long COOLDOWN_SECONDS = 5;
     private final Map<String, Instant> lastNotificationTimes = new ConcurrentHashMap<>();
     private final Map<String, ValueEventListener> sensorListeners = new ConcurrentHashMap<>();
 

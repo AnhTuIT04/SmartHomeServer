@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import hcmut.smart_home.config.PublicEndpoint;
+import hcmut.smart_home.dto.PaginationResponse;
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
@@ -34,6 +35,7 @@ import hcmut.smart_home.dto.user.UpdateUserRequest;
 import hcmut.smart_home.dto.user.UserResponse;
 import hcmut.smart_home.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -205,10 +207,14 @@ public class UserController {
     }
 
     @GetMapping("/me/notifications")
-    @Operation(summary = "Get user notifications", tags = "User Management")
+    @Operation(
+        summary = "Get user notifications",
+        description = "Retrieve a paginated list of notifications for the authenticated user.",
+        tags = "User Management"
+    )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "User notifications retrieved successfully",
-                    content = @Content(schema = @Schema(implementation = NotificationResponse.class))),
+                    content = @Content(schema = @Schema(implementation = PaginationResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized",
                     content = @Content()),
             @ApiResponse(responseCode = "404", description = "User not found",
@@ -218,8 +224,16 @@ public class UserController {
             @ApiResponse(responseCode = "500", description = "Internal server error",
                     content = @Content())
     })
-    public ResponseEntity<List<NotificationResponse>> getUserNotifications(@RequestAttribute("userId") String userId) {
-        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserNotifications(userId));
+    public ResponseEntity<PaginationResponse<NotificationResponse>> getUserNotifications(
+        @RequestAttribute("userId") String userId,
+
+        @Parameter(description = "Page number for pagination") 
+        @RequestParam(required = false) Integer page,
+
+        @Parameter(description = "Limit number for pagination")
+        @RequestParam(required = false) Integer limit
+    ) {
+        return ResponseEntity.status(HttpStatus.OK).body(userService.getUserNotifications(userId, page, limit));
     }
 
     @PostMapping("/me/mode-configs")

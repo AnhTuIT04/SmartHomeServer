@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import com.google.cloud.firestore.DocumentReference;
 import com.google.cloud.firestore.Firestore;
 
+import hcmut.smart_home.dto.PaginationResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.exception.InternalServerErrorException;
 
@@ -44,16 +45,28 @@ public class NotificationService {
      * @return a list of {@link NotificationResponse} objects representing the notifications
      * @throws InternalServerErrorException if an error occurs while fetching the notifications
      */
-    public List<NotificationResponse> getNotifications(String sensorId) {
+    public PaginationResponse<NotificationResponse> getNotifications(String sensorId, int page, int limit) {
         try {
             List<NotificationResponse> notifications = new ArrayList<>();
-            firestore.collection("notifications")
+            // Fetch all notifications for the sensor, sorted ascending by timestamp (or createdAt)
+            var querySnapshot = firestore.collection("notifications")
                     .whereEqualTo("sensorId", sensorId)
+                    .orderBy("timestamp", com.google.cloud.firestore.Query.Direction.DESCENDING)
                     .get()
-                    .get()
+                    .get();
+
+            int total = querySnapshot.size();
+            int fromIndex = Math.max(0, (page - 1) * limit);
+            int toIndex = Math.min(fromIndex + limit, total);
+
+            querySnapshot.getDocuments().subList(fromIndex, toIndex)
                     .forEach(doc -> notifications.add(new NotificationResponse(doc.getData())));
 
-            return notifications;
+            boolean hasNextPage = toIndex < total;
+            boolean hasPrevPage = fromIndex > 0;
+
+            NotificationResponse[] dataArr = notifications.toArray(NotificationResponse[]::new);
+            return new PaginationResponse<>(dataArr, page, limit, total, hasNextPage, hasPrevPage);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InternalServerErrorException();

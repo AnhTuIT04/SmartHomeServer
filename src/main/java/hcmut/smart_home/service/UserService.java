@@ -18,6 +18,7 @@ import com.google.cloud.firestore.QuerySnapshot;
 import com.google.cloud.firestore.WriteBatch;
 
 import hcmut.smart_home.dto.FaceEmbedding.FaceEmbedding;
+import hcmut.smart_home.dto.PaginationResponse;
 import hcmut.smart_home.dto.SingleResponse;
 import hcmut.smart_home.dto.notification.NotificationResponse;
 import hcmut.smart_home.dto.user.AuthResponse;
@@ -547,7 +548,7 @@ public class UserService {
      * @throws BadRequestException If the user has not subscribed to any sensor.
      * @throws InternalServerErrorException If an error occurs while fetching data from Firestore.
      */
-    public List<NotificationResponse> getUserNotifications(String userId) {
+    public PaginationResponse<NotificationResponse> getUserNotifications(String userId, Integer page, Integer limit) {
         try {
             // Get reference to the user document in Firestore
             DocumentReference docRef = firestore.collection("users").document(userId);
@@ -571,8 +572,9 @@ public class UserService {
                 throw new NotFoundException("Sensor not found");
             }
 
-            return notificationService.getNotifications(sensorId);
-
+            int _page = page != null ? page : 1;
+            int _limit = limit != null ? limit : 10;
+            return notificationService.getNotifications(sensorId, _page, _limit);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InternalServerErrorException();
